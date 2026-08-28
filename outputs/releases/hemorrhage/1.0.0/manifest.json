@@ -1,0 +1,39 @@
+{
+  "task": "hemorrhage",
+  "model_version": "1.0.0",
+  "gcs_uri": "${BRAINON_MODEL_URI}/releases/hemorrhage/1.0.0/model.ckpt",
+  "sha256": "703a39a49efd8c8962124a0b9241ce642b385b8219bfb9bebba413a225ceda87",
+  "input_modality": [],
+  "preprocessing": {},
+  "postprocessing": {},
+  "labels": {
+    "0": "background",
+    "1": "foreground"
+  },
+  "source_repository": "https://github.com/brainCDSS/model",
+  "source_git_commit": "7979893",
+  "data_release": {
+    "release": "hemorrhage_binary_v1.0.0",
+    "split_id": "synthetic-v1"
+  },
+  "metrics": {
+    "epoch": 0,
+    "train_loss": 0.6565243204434713,
+    "val_loss": 0.6469729542732239,
+    "lesion_dice_mean": 0.0,
+    "lesion_precision": 0.0,
+    "lesion_recall": 0.0,
+    "lesion_f1": 0.0,
+    "fp_per_scan": 61.0,
+    "absolute_lesion_count_difference": 60.0,
+    "dice_fg_case_mean": 0.07202216066481995,
+    "dice_fg_global": 0.07202216066481995,
+    "hd95_mm": 7.211102550927978,
+    "nsd": NaN,
+    "avd_ml": 0.115,
+    "rvd_percent": 93.4959349593496,
+    "froc_score": 0.0,
+    "patient_specificity": NaN,
+    "false_positive_volume_ml": 0.0
+  }
+}

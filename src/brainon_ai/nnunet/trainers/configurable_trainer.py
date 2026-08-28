@@ -1,0 +1,277 @@
+from __future__ import annotations
+
+import json
+import math
+import os
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.distributed as dist
+from torch._dynamo import OptimizedModule
+
+from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
+from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.utilities.collate_outputs import collate_outputs
+
+from ich_nnunet.config import config_digest, load_config
+from ich_nnunet.losses import build_loss
+from ich_nnunet.networks import build_network
+from ich_nnunet.pruning import EarlyStopping
+
+
+class nnUNetTrainerICHBaseline(nnUNetTrainer):
+    """YAML로 trainer/loss/network/checkpoint/pruning을 제어하는 단일 GPU baseline."""
+
+    def __init__(
+        self,
+        plans: dict,
+        configuration: str,
+        fold: int,
+        dataset_json: dict,
+        device: torch.device = torch.device("cuda"),
+    ):
+        self.ich_config = load_config()
+        self.ich_config_digest = config_digest(self.ich_config)
+        super().__init__(plans, configuration, fold, dataset_json, device)
+        cfg = self.ich_config["trainer"]
+        self.num_epochs = int(cfg["epochs"])
+        self.num_iterations_per_epoch = int(cfg["iterations_per_epoch"])
+        self.num_val_iterations_per_epoch = int(cfg["validation_iterations_per_epoch"])
+        self.save_every = int(cfg["save_every"])
+        self.initial_lr = float(cfg["learning_rate"])
+        self.weight_decay = float(cfg["weight_decay"])
+        self.oversample_foreground_percent = float(cfg["oversample_foreground_percent"])
+
+        pruning = self.ich_config["pruning"]
+        self.early_stopping = EarlyStopping(
+            enabled=bool(pruning["enabled"]),
+            min_epochs=int(pruning["min_epochs"]),
+            patience=int(pruning["patience"]),
+            min_delta=float(pruning["min_delta"]),
+        )
+        self._last_recall = float("nan")
+        self._stop_requested = False
+        self._best_dice = float("-inf")
+        self._best_recall = float("-inf")
+        self._best_composite = float("-inf")
+        self._metrics_path = Path(self.output_folder) / "custom_metrics.json"
+        self._config_marker_path = Path(self.output_folder) / "ich_config.json"
+
+    def on_train_start(self):
+        if self._config_marker_path.is_file():
+            marker = json.loads(self._config_marker_path.read_text(encoding="utf-8"))
+            if marker.get("sha256") != self.ich_config_digest:
+                raise RuntimeError(
+                    "같은 nnU-Net 결과 폴더에 다른 YAML 설정을 사용할 수 없습니다. "
+                    "plans.output_identifier를 새 이름으로 바꾸세요."
+                )
+        super().on_train_start()
+        if self.local_rank == 0:
+            payload = {
+                "sha256": self.ich_config_digest,
+                "config": {key: value for key, value in self.ich_config.items() if not key.startswith("_")},
+            }
+            temporary = self._config_marker_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            os.replace(temporary, self._config_marker_path)
+
+    def save_checkpoint(self, filename: str) -> None:
+        if self.local_rank != 0:
+            return
+        if self.disable_checkpointing:
+            self.print_to_log_file("No checkpoint written, checkpointing is disabled")
+            return
+        module = self.network.module if self.is_ddp else self.network
+        if isinstance(module, OptimizedModule):
+            module = module._orig_mod
+        checkpoint = {
+            "network_weights": module.state_dict(),
+            "optimizer_state": self.optimizer.state_dict(),
+            "grad_scaler_state": self.grad_scaler.state_dict() if self.grad_scaler is not None else None,
+            "logging": self.logger.get_checkpoint(),
+            "_best_ema": self._best_ema,
+            "current_epoch": self.current_epoch + 1,
+            "init_args": self.my_init_kwargs,
+            "trainer_name": self.__class__.__name__,
+            "inference_allowed_mirroring_axes": self.inference_allowed_mirroring_axes,
+            "ich_config_sha256": self.ich_config_digest,
+            "ich_config": {key: value for key, value in self.ich_config.items() if not key.startswith("_")},
+            "ich_state": {
+                "best_dice": float(self._best_dice),
+                "best_recall": float(self._best_recall),
+                "best_composite": float(self._best_composite),
+                "pruning": self.early_stopping.state_dict(),
+            },
+        }
+        path = Path(filename)
+        temporary = path.with_name(path.name + ".tmp")
+        torch.save(checkpoint, temporary)
+        os.replace(temporary, path)
+
+    def load_checkpoint(self, filename_or_checkpoint) -> None:
+        if isinstance(filename_or_checkpoint, (str, Path)):
+            path = str(filename_or_checkpoint)
+            checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+            saved_digest = checkpoint.get("ich_config_sha256")
+            if saved_digest is not None and saved_digest != self.ich_config_digest:
+                raise RuntimeError(
+                    "checkpoint와 현재 ICH_NNUNET_CONFIG의 설정이 다릅니다. "
+                    "학습 때 사용한 YAML을 지정하세요."
+                )
+            super().load_checkpoint(path)
+        else:
+            checkpoint = filename_or_checkpoint
+            super().load_checkpoint(filename_or_checkpoint)
+        state = checkpoint.get("ich_state", {})
+        self._best_dice = float(state.get("best_dice", self._best_dice))
+        self._best_recall = float(state.get("best_recall", self._best_recall))
+        self._best_composite = float(state.get("best_composite", self._best_composite))
+        self.early_stopping.load_state_dict(state.get("pruning"))
+
+    @staticmethod
+    def build_network_architecture(
+        plans_manager,
+        configuration_manager,
+        num_input_channels: int,
+        num_output_channels: int,
+        enable_deep_supervision: bool = True,
+    ):
+        return build_network(
+            load_config()["network"],
+            plans_manager,
+            configuration_manager,
+            num_input_channels,
+            num_output_channels,
+            enable_deep_supervision,
+        )
+
+    def _build_loss(self):
+        return build_loss(self, self.ich_config["loss"])
+
+    def configure_optimizers(self):
+        cfg = self.ich_config["trainer"]
+        optimizer_cfg = cfg["optimizer"]
+        name = str(optimizer_cfg["name"]).lower()
+        if name == "sgd":
+            optimizer = torch.optim.SGD(
+                self.network.parameters(),
+                lr=self.initial_lr,
+                weight_decay=self.weight_decay,
+                momentum=float(optimizer_cfg.get("momentum", 0.99)),
+                nesterov=bool(optimizer_cfg.get("nesterov", True)),
+            )
+        elif name == "adamw":
+            optimizer = torch.optim.AdamW(
+                self.network.parameters(),
+                lr=self.initial_lr,
+                weight_decay=self.weight_decay,
+            )
+        else:
+            raise ValueError(f"지원하지 않는 optimizer: {name}")
+
+        scheduler_name = str(cfg["scheduler"]["name"]).lower()
+        if scheduler_name != "poly":
+            raise ValueError("nnU-Net baseline scheduler는 현재 poly만 지원합니다.")
+        return optimizer, PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs)
+
+    def on_validation_epoch_end(self, val_outputs: list[dict]):
+        super().on_validation_epoch_end(val_outputs)
+        collated = collate_outputs(val_outputs)
+        tp = np.sum(collated["tp_hard"], 0)
+        fn = np.sum(collated["fn_hard"], 0)
+        if self.is_ddp:
+            gathered_tp = [None for _ in range(dist.get_world_size())]
+            gathered_fn = [None for _ in range(dist.get_world_size())]
+            dist.all_gather_object(gathered_tp, tp)
+            dist.all_gather_object(gathered_fn, fn)
+            tp = np.vstack(gathered_tp).sum(0)
+            fn = np.vstack(gathered_fn).sum(0)
+        denominator = tp + fn
+        recalls = np.divide(tp, denominator, out=np.full_like(tp, np.nan, dtype=float), where=denominator > 0)
+        finite_recalls = recalls[np.isfinite(recalls)]
+        self._last_recall = float(finite_recalls.mean()) if finite_recalls.size else float("nan")
+
+    def _save_metric_state(self, dice: float, recall: float, composite: float, epoch: int) -> None:
+        if self.local_rank != 0:
+            return
+
+        def finite_or_none(value: float):
+            return float(value) if math.isfinite(value) else None
+
+        payload = {
+            "epoch": epoch,
+            "pseudo_dice": finite_or_none(dice),
+            "pseudo_recall": finite_or_none(recall),
+            "composite": finite_or_none(composite),
+            "best_dice": finite_or_none(self._best_dice),
+            "best_recall": finite_or_none(self._best_recall),
+            "best_composite": finite_or_none(self._best_composite),
+            "pruning_best": finite_or_none(self.early_stopping.best),
+            "pruning_bad_checks": self.early_stopping.bad_checks,
+            "metrics_note": "patch-based online validation metrics; final reporting requires full-volume evaluation",
+        }
+        temporary = self._metrics_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporary, self._metrics_path)
+
+    def on_epoch_end(self):
+        epoch = self.current_epoch
+        dice = float(self.logger.get_value("mean_fg_dice", step=-1))
+        recall = float(self._last_recall)
+        weights = self.ich_config["checkpoint"]
+        composite = (
+            float(weights["dice_weight"]) * dice + float(weights["recall_weight"]) * recall
+            if math.isfinite(dice) and math.isfinite(recall)
+            else float("nan")
+        )
+        min_delta = float(weights.get("min_delta", 0.0))
+        improved_dice = math.isfinite(dice) and dice > self._best_dice + min_delta
+        improved_recall = math.isfinite(recall) and recall > self._best_recall + min_delta
+        improved_composite = math.isfinite(composite) and composite > self._best_composite + min_delta
+        if improved_dice:
+            self._best_dice = dice
+        if improved_recall:
+            self._best_recall = recall
+        if improved_composite:
+            self._best_composite = composite
+
+        completed_epochs = epoch + 1
+        if math.isfinite(composite):
+            self._stop_requested = self.early_stopping.update(composite, completed_epochs)
+        else:
+            self._stop_requested = False
+            self.print_to_log_file("ICH metrics: Recall/Composite가 NaN이라 best 저장과 pruning 갱신을 건너뜁니다.")
+        self.print_to_log_file(
+            f"ICH metrics: pseudo_dice={dice:.4f}, pseudo_recall={recall:.4f}, composite={composite:.4f}"
+        )
+        super().on_epoch_end()
+        if improved_dice or improved_recall or improved_composite:
+            self.current_epoch -= 1
+            try:
+                if improved_dice:
+                    self.save_checkpoint(str(Path(self.output_folder) / "checkpoint_best_dice.pth"))
+                if improved_recall:
+                    self.save_checkpoint(str(Path(self.output_folder) / "checkpoint_best_recall.pth"))
+                if improved_composite:
+                    self.save_checkpoint(str(Path(self.output_folder) / "checkpoint_best_composite.pth"))
+            finally:
+                self.current_epoch += 1
+        self._save_metric_state(dice, recall, composite, epoch)
+
+    def run_training(self):
+        self.on_train_start()
+        for _ in range(self.current_epoch, self.num_epochs):
+            self.on_epoch_start()
+            self.on_train_epoch_start()
+            train_outputs = [self.train_step(next(self.dataloader_train)) for _ in range(self.num_iterations_per_epoch)]
+            self.on_train_epoch_end(train_outputs)
+            with torch.no_grad():
+                self.on_validation_epoch_start()
+                val_outputs = [self.validation_step(next(self.dataloader_val)) for _ in range(self.num_val_iterations_per_epoch)]
+                self.on_validation_epoch_end(val_outputs)
+            self.on_epoch_end()
+            if self._stop_requested:
+                self.print_to_log_file("Pruning: validation composite가 patience 동안 개선되지 않아 조기 종료합니다.")
+                break
+        self.on_train_end()

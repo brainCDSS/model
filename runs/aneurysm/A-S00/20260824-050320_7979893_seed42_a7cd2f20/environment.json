@@ -1,0 +1,9 @@
+{
+  "python": "3.12.13 (main, Jul 14 2026, 02:09:00) [GCC 14.2.0]",
+  "platform": "Linux-7.0.0-29-generic-x86_64-with-glibc2.41",
+  "packages": {},
+  "torch": "2.13.0+cu130",
+  "cuda_available": true,
+  "cuda": "13.0",
+  "gpu": "NVIDIA GeForce RTX 5090"
+}

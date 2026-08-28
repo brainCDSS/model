@@ -1,0 +1,2 @@
+epoch,train_loss,val_loss,lesion_dice_mean,lesion_precision,lesion_recall,lesion_f1,fp_per_scan,absolute_lesion_count_difference,dice_fg_case_mean,dice_fg_global,hd95_mm,nsd,avd_ml,rvd_percent,froc_score,patient_specificity,false_positive_volume_ml
+0,0.5274843772252401,0.5255979299545288,0.18867924528301888,1.0,1.0,1.0,0.0,0.0,0.18867924528301888,0.18867924528301888,4.123105625617661,nan,0.08700000000000001,-70.73170731707317,1.0,nan,0.0

@@ -1,0 +1,39 @@
+task: hemorrhage
+experiment_id: H-S00
+data_release: hemorrhage_binary_v1.0.0
+split_id: synthetic-v1
+data:
+  manifest: ${BRAINON_CACHE_ROOT:-.cache/brainon}/synthetic/hemorrhage/manifest.csv
+model:
+  name: segresnet
+  in_channels: 1
+  features: 4
+runtime:
+  seed: 42
+  device: cpu
+  amp: false
+  deterministic: true
+training:
+  epochs: 1
+  learning_rate: 0.001
+  gradient_accumulation: 1
+  early_stopping_patience: 3
+  resume: null
+inference:
+  sliding_window: true
+  roi_size:
+  - 16
+  - 16
+  - 16
+  overlap: 0.25
+evaluation:
+  threshold: 0.5
+  postprocessing:
+    minimum_component_size: 0
+selection:
+  primary: val/dice_fg_case_mean
+  primary_mode: max
+  primary_tolerance: 0.01
+  secondary: val/avd_ml_median
+  secondary_mode: min
+  tie_breaker: val/hd95_mm_median

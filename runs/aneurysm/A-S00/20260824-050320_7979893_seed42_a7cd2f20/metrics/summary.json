@@ -1,0 +1,20 @@
+{
+  "epoch": 0,
+  "train_loss": 0.6569501360257467,
+  "val_loss": 0.6466935873031616,
+  "lesion_dice_mean": 0.10852713178294573,
+  "lesion_precision": 0.014285714285714285,
+  "lesion_recall": 1.0,
+  "lesion_f1": 0.028169014084507043,
+  "fp_per_scan": 69.0,
+  "absolute_lesion_count_difference": 69.0,
+  "dice_fg_case_mean": 0.07799442896935933,
+  "dice_fg_global": 0.07799442896935933,
+  "hd95_mm": 8.12403840463596,
+  "nsd": NaN,
+  "avd_ml": 0.113,
+  "rvd_percent": 91.869918699187,
+  "froc_score": 0.0,
+  "patient_specificity": NaN,
+  "false_positive_volume_ml": 0.0
+}
