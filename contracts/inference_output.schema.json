@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BrainOn segmentation inference output",
+  "type": "object",
+  "required": ["case_id", "task", "model_version", "prediction_uri", "sha256"],
+  "properties": {
+    "case_id": {"type": "string"}, "task": {"type": "string"}, "model_version": {"type": "string"},
+    "prediction_uri": {"type": "string"}, "sha256": {"type": "string"}, "metrics": {"type": "object"}
+  }
+}
+

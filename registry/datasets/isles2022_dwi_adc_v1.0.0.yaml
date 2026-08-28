@@ -1,0 +1,7 @@
+task: ischemia
+release_id: isles2022_dwi_adc_v1.0.0
+dataset_id: Dataset102_IschemiaDwiAdc
+sources: [ISLES 2022]
+official_source: "https://isles-challenge.org/"
+manifest_columns: [case_id, source_dataset, modality, image_paths, label_path, label_positive, shape, spacing, orientation, qc_status, exclusion_reason, split, sha256, data_release]
+

@@ -1,0 +1,7 @@
+cache_root: ${BRAINON_CACHE_ROOT:-.cache/brainon}
+run_root: ${BRAINON_RUN_ROOT:-runs}
+raw_uri: ${BRAINON_RAW_URI:-}
+data_uri: ${BRAINON_DATA_URI:-}
+experiment_uri: ${BRAINON_EXPERIMENT_URI:-}
+model_uri: ${BRAINON_MODEL_URI:-}
+

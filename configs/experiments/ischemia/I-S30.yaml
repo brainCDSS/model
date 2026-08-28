@@ -1,0 +1,4 @@
+extends: I-S00.yaml
+experiment_id: I-S30
+model: {name: gated_multiscale_fusion}
+

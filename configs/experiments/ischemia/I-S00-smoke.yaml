@@ -1,0 +1,19 @@
+task: ischemia
+experiment_id: I-S00
+data_release: isles2022_dwi_adc_v1.0.0
+split_id: synthetic-v1
+data:
+  manifest: ${BRAINON_CACHE_ROOT:-.cache/brainon}/synthetic/ischemia/manifest.csv
+model: {name: segresnet_early_fusion, in_channels: 2, features: 4}
+runtime: {seed: 42, device: cpu, amp: false, deterministic: true}
+training: {epochs: 1, learning_rate: 0.001, gradient_accumulation: 1, early_stopping_patience: 3, resume: null}
+inference: {sliding_window: true, roi_size: [16, 16, 16], overlap: 0.25}
+evaluation: {threshold: 0.5, postprocessing: {minimum_component_size: 0}}
+selection:
+  primary: val/lesion_f1_mean
+  primary_mode: max
+  primary_tolerance: 0.01
+  secondary: val/dice_fg_case_mean
+  secondary_mode: max
+  tie_breaker: val/avd_ml_median
+

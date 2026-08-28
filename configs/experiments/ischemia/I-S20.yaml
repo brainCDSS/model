@@ -1,0 +1,3 @@
+extends: I-S00.yaml
+experiment_id: I-S20
+model: {name: multiscale_fusion}

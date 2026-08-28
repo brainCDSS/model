@@ -1,0 +1,1 @@
+"""Hemorrhage model adapters."""

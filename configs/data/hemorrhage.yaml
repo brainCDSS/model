@@ -1,0 +1,6 @@
+task: hemorrhage
+release_id: hemorrhage_binary_v1.0.0
+dataset_id: Dataset101_HemorrhageBinary
+modalities: [NCCT]
+channels: 1
+

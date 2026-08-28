@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/brainCDSS/model/contracts/model_release.schema.json",
+  "title": "BrainOn model release",
+  "type": "object",
+  "required": ["task", "model_version", "gcs_uri", "sha256", "input_modality", "preprocessing", "postprocessing", "labels", "source_repository", "source_git_commit", "data_release", "metrics"],
+  "properties": {
+    "task": {"enum": ["hemorrhage", "ischemia", "aneurysm"]},
+    "model_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "gcs_uri": {"type": "string"}, "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "input_modality": {"type": "array", "items": {"type": "string"}},
+    "preprocessing": {"type": "object"}, "postprocessing": {"type": "object"},
+    "labels": {"type": "object"}, "source_repository": {"const": "https://github.com/brainCDSS/model"},
+    "source_git_commit": {"type": "string"}, "data_release": {"type": ["object", "string"]}, "metrics": {"type": "object"}
+  },
+  "additionalProperties": false
+}
+

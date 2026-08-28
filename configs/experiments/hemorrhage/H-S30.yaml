@@ -1,0 +1,4 @@
+extends: H-S00.yaml
+experiment_id: H-S30
+model: {name: segresnet_attention_multiscale}
+

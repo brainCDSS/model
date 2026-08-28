@@ -1,0 +1,7 @@
+task: hemorrhage
+release_id: hemorrhage_binary_v1.0.0
+dataset_id: Dataset101_HemorrhageBinary
+sources: [BHSD, INSTANCE 2022, BCIHM]
+official_source: "See docs/DATASETS.md; licenses and DUA must be completed manually."
+manifest_columns: [case_id, source_dataset, modality, image_paths, label_path, label_positive, shape, spacing, orientation, qc_status, exclusion_reason, split, sha256, data_release]
+

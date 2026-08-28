@@ -1,0 +1,4 @@
+extends: H-S00-smoke.yaml
+experiment_id: H-N00
+model: {name: nnunet, in_channels: 1, features: 16}
+training: {epochs: 300}

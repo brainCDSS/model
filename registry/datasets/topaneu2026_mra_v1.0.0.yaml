@@ -1,0 +1,7 @@
+task: aneurysm
+release_id: topaneu2026_mra_v1.0.0
+dataset_id: Dataset103_AneurysmMra
+sources: [TopAneu 2026]
+official_source: "Use the official TopAneu 2026 distribution after accepting its terms."
+manifest_columns: [case_id, source_dataset, modality, image_paths, label_path, label_positive, shape, spacing, orientation, qc_status, exclusion_reason, split, sha256, data_release]
+

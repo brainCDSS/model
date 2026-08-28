@@ -1,0 +1,27 @@
+name: synthetic-cpu-ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install package
+        run: python -m pip install -e ".[dev,notebook,storage]"
+      - name: Synthetic checks
+        run: |
+          brainon doctor
+          brainon storage doctor --backend local
+          brainon data make-synthetic --task all
+          brainon smoke-test --task all
+          pytest -q
+
