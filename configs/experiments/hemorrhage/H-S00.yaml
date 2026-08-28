@@ -1,0 +1,3 @@
+extends: H-S00-smoke.yaml
+training: {epochs: 300}
+model: {features: 16}

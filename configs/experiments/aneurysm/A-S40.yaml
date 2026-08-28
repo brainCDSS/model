@@ -1,0 +1,4 @@
+extends: A-S00.yaml
+experiment_id: A-S40
+model: {name: validated_module_combination}
+

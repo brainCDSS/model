@@ -1,0 +1,3 @@
+extends: A-S00.yaml
+experiment_id: A-S10
+model: {name: attention_skip}

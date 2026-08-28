@@ -1,0 +1,3 @@
+extends: H-S00.yaml
+experiment_id: H-S10
+model: {name: segresnet_attention_gate}

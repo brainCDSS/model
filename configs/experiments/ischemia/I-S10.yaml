@@ -1,0 +1,3 @@
+extends: I-S00.yaml
+experiment_id: I-S10
+model: {name: dual_encoder}
