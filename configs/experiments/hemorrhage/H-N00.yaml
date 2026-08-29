@@ -1,4 +1,55 @@
-extends: H-S00-smoke.yaml
-experiment_id: H-N00
-model: {name: nnunet, in_channels: 1, features: 16}
-training: {epochs: 300}
+experiment:
+  name: nnunet_baseline
+  dataset_id: 1
+  configuration: 3d_fullres
+  fold: 0
+  # auto: CUDA가 있으면 GPU, 없으면 CPU를 사용합니다.
+  device: auto
+  continue_training: false
+  validation_checkpoint: best_composite
+
+plans:
+  base_identifier: nnUNetPlans
+  # 실험마다 고유한 이름을 사용하세요. 같은 이름으로 설정을 바꾸면 결과 폴더가 충돌합니다.
+  output_identifier: ICHPlansBaselineV1
+  # 이 Dataset001 plan의 nnU-Net 내부(transposed) 축 순서는 [z, y, x]입니다.
+  patch_size: [20, 320, 256]
+  batch_size: 1
+
+trainer:
+  epochs: 1000
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  save_every: 50
+  learning_rate: 0.01
+  weight_decay: 0.00003
+  oversample_foreground_percent: 0.33
+  optimizer:
+    name: sgd
+    momentum: 0.99
+    nesterov: true
+  scheduler:
+    name: poly
+
+loss:
+  name: dice_ce
+  include_background: false
+  dice_weight: 1.0
+  ce_weight: 1.0
+  smooth: 0.00001
+
+checkpoint:
+  dice_weight: 0.5
+  recall_weight: 0.5
+  min_delta: 0.0001
+
+pruning:
+  enabled: true
+  monitor: composite
+  min_epochs: 200
+  patience: 30
+  min_delta: 0.001
+
+network:
+  # default는 plans의 nnU-Net 구조를 사용합니다. 새 구조는 networks/factory.py에 등록합니다.
+  name: default

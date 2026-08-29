@@ -11,7 +11,7 @@ import torch
 from monai.inferers import sliding_window_inference
 from tqdm.auto import tqdm
 
-from segresnet_baseline.metrics import binary_case_metrics, summarize_cases
+from brainon_ai.models.hemorrhage.segresnet.metrics import binary_case_metrics, summarize_cases
 
 
 def _first(value: Any):

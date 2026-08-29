@@ -14,7 +14,13 @@ CONFIG_ENV = "ICH_NNUNET_CONFIG"
 
 
 def default_config_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "configs" / "baseline.yaml"
+    return (
+        Path(__file__).resolve().parents[3]
+        / "configs"
+        / "experiments"
+        / "hemorrhage"
+        / "H-N00.yaml"
+    )
 
 
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
@@ -25,14 +31,26 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         config = yaml.safe_load(handle) or {}
     for section in ("experiment", "plans", "trainer", "loss", "checkpoint", "pruning", "network"):
         if section not in config:
-            raise ValueError(f"설정 섹션이 없습니다: {section}")
+            raise ValueError(f"nnU-Net 설정 섹션이 없습니다: {section}")
     if str(config["plans"]["base_identifier"]) == str(config["plans"]["output_identifier"]):
         raise ValueError("plans.output_identifier는 base_identifier와 달라야 합니다.")
     if str(config["pruning"].get("monitor", "composite")).lower() != "composite":
         raise ValueError("현재 pruning.monitor는 composite만 지원합니다.")
-    weights = (float(config["checkpoint"]["dice_weight"]), float(config["checkpoint"]["recall_weight"]))
+    weights = (
+        float(config["checkpoint"]["dice_weight"]),
+        float(config["checkpoint"]["recall_weight"]),
+    )
     if min(weights) < 0 or sum(weights) <= 0:
-        raise ValueError("checkpoint Dice/Recall 가중치는 음수가 아니며 합이 0보다 커야 합니다.")
+        raise ValueError("checkpoint Dice/Recall 가중치는 음수가 아니고 합이 0보다 커야 합니다.")
+    patch_size = config["plans"].get("patch_size")
+    if not isinstance(patch_size, list) or len(patch_size) not in (2, 3):
+        raise ValueError("plans.patch_size는 2D 또는 3D 정수 목록이어야 합니다.")
+    if any(int(value) <= 0 for value in patch_size):
+        raise ValueError("plans.patch_size의 모든 값은 양수여야 합니다.")
+    if int(config["plans"].get("batch_size", 0)) <= 0:
+        raise ValueError("plans.batch_size는 양수여야 합니다.")
+    if int(config["trainer"].get("epochs", 0)) <= 0:
+        raise ValueError("trainer.epochs는 양수여야 합니다.")
     config["_config_path"] = str(candidate)
     return config
 
@@ -47,5 +65,7 @@ def config_digest(config: dict[str, Any]) -> str:
     payload = deepcopy({key: value for key, value in config.items() if not key.startswith("_")})
     for key in ("device", "continue_training", "validation_checkpoint"):
         payload.get("experiment", {}).pop(key, None)
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()

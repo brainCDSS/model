@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import math
 import os
+from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 
 import numpy as np
 import torch
@@ -14,10 +17,10 @@ from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
 from nnunetv2.utilities.collate_outputs import collate_outputs
 
-from ich_nnunet.config import config_digest, load_config
-from ich_nnunet.losses import build_loss
-from ich_nnunet.networks import build_network
-from ich_nnunet.pruning import EarlyStopping
+from brainon_ai.nnunet.config import config_digest, load_config
+from brainon_ai.nnunet.losses import build_loss
+from brainon_ai.nnunet.networks import build_network
+from brainon_ai.nnunet.pruning import EarlyStopping
 
 
 class nnUNetTrainerICHBaseline(nnUNetTrainer):
@@ -33,6 +36,14 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
     ):
         self.ich_config = load_config()
         self.ich_config_digest = config_digest(self.ich_config)
+        plans = deepcopy(plans)
+        plan_config = plans.get("configurations", {}).get(configuration)
+        if plan_config is None:
+            raise ValueError(f"plans에 configuration이 없습니다: {configuration}")
+        plan_config["patch_size"] = [
+            int(value) for value in self.ich_config["plans"]["patch_size"]
+        ]
+        plan_config["batch_size"] = int(self.ich_config["plans"]["batch_size"])
         super().__init__(plans, configuration, fold, dataset_json, device)
         cfg = self.ich_config["trainer"]
         self.num_epochs = int(cfg["epochs"])
@@ -56,7 +67,64 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         self._best_recall = float("-inf")
         self._best_composite = float("-inf")
         self._metrics_path = Path(self.output_folder) / "custom_metrics.json"
+        self._progress_path = Path(self.output_folder) / "progress.json"
         self._config_marker_path = Path(self.output_folder) / "ich_config.json"
+        self._session_started = monotonic()
+        self._epoch_durations: list[float] = []
+
+    @staticmethod
+    def _finite_or_none(value: float):
+        return float(value) if math.isfinite(value) else None
+
+    def _write_json_atomic(self, path: Path, payload: dict) -> None:
+        if self.local_rank != 0:
+            return
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(temporary, path)
+
+    def _write_progress(
+        self,
+        status: str,
+        completed_epochs: int,
+        dice: float = float("nan"),
+        recall: float = float("nan"),
+        composite: float = float("nan"),
+        message: str | None = None,
+    ) -> None:
+        mean_epoch_seconds = (
+            sum(self._epoch_durations) / len(self._epoch_durations)
+            if self._epoch_durations
+            else None
+        )
+        payload = {
+            "status": status,
+            "message": message,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "current_epoch": completed_epochs,
+            "total_epochs": self.num_epochs,
+            "progress_percent": round(100 * completed_epochs / self.num_epochs, 2),
+            "session_elapsed_seconds": round(monotonic() - self._session_started, 2),
+            "last_epoch_seconds": self._epoch_durations[-1] if self._epoch_durations else None,
+            "mean_epoch_seconds": mean_epoch_seconds,
+            "eta_seconds": (
+                mean_epoch_seconds * max(0, self.num_epochs - completed_epochs)
+                if mean_epoch_seconds
+                else None
+            ),
+            "pseudo_dice": self._finite_or_none(dice),
+            "pseudo_recall": self._finite_or_none(recall),
+            "composite": self._finite_or_none(composite),
+            "best_dice": self._finite_or_none(self._best_dice),
+            "best_recall": self._finite_or_none(self._best_recall),
+            "best_composite": self._finite_or_none(self._best_composite),
+            "pruning_bad_checks": self.early_stopping.bad_checks,
+            "pruning_patience": self.early_stopping.patience,
+            "output_folder": str(self.output_folder),
+            "batch_size": self.configuration_manager.batch_size,
+            "patch_size": list(self.configuration_manager.patch_size),
+        }
+        self._write_json_atomic(self._progress_path, payload)
 
     def on_train_start(self):
         if self._config_marker_path.is_file():
@@ -67,14 +135,13 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
                     "plans.output_identifier를 새 이름으로 바꾸세요."
                 )
         super().on_train_start()
+        self._write_progress("running", self.current_epoch)
         if self.local_rank == 0:
             payload = {
                 "sha256": self.ich_config_digest,
                 "config": {key: value for key, value in self.ich_config.items() if not key.startswith("_")},
             }
-            temporary = self._config_marker_path.with_suffix(".json.tmp")
-            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-            os.replace(temporary, self._config_marker_path)
+            self._write_json_atomic(self._config_marker_path, payload)
 
     def save_checkpoint(self, filename: str) -> None:
         if self.local_rank != 0:
@@ -196,24 +263,19 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         if self.local_rank != 0:
             return
 
-        def finite_or_none(value: float):
-            return float(value) if math.isfinite(value) else None
-
         payload = {
             "epoch": epoch,
-            "pseudo_dice": finite_or_none(dice),
-            "pseudo_recall": finite_or_none(recall),
-            "composite": finite_or_none(composite),
-            "best_dice": finite_or_none(self._best_dice),
-            "best_recall": finite_or_none(self._best_recall),
-            "best_composite": finite_or_none(self._best_composite),
-            "pruning_best": finite_or_none(self.early_stopping.best),
+            "pseudo_dice": self._finite_or_none(dice),
+            "pseudo_recall": self._finite_or_none(recall),
+            "composite": self._finite_or_none(composite),
+            "best_dice": self._finite_or_none(self._best_dice),
+            "best_recall": self._finite_or_none(self._best_recall),
+            "best_composite": self._finite_or_none(self._best_composite),
+            "pruning_best": self._finite_or_none(self.early_stopping.best),
             "pruning_bad_checks": self.early_stopping.bad_checks,
             "metrics_note": "patch-based online validation metrics; final reporting requires full-volume evaluation",
         }
-        temporary = self._metrics_path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(temporary, self._metrics_path)
+        self._write_json_atomic(self._metrics_path, payload)
 
     def on_epoch_end(self):
         epoch = self.current_epoch
@@ -246,6 +308,11 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
             f"ICH metrics: pseudo_dice={dice:.4f}, pseudo_recall={recall:.4f}, composite={composite:.4f}"
         )
         super().on_epoch_end()
+        epoch_seconds = float(
+            self.logger.get_value("epoch_end_timestamps", step=-1)
+            - self.logger.get_value("epoch_start_timestamps", step=-1)
+        )
+        self._epoch_durations.append(epoch_seconds)
         if improved_dice or improved_recall or improved_composite:
             self.current_epoch -= 1
             try:
@@ -258,8 +325,15 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
             finally:
                 self.current_epoch += 1
         self._save_metric_state(dice, recall, composite, epoch)
+        self._write_progress(
+            "early_stopping" if self._stop_requested else "running",
+            epoch + 1,
+            dice,
+            recall,
+            composite,
+        )
 
-    def run_training(self):
+    def _run_training_without_progress_guard(self):
         self.on_train_start()
         for _ in range(self.current_epoch, self.num_epochs):
             self.on_epoch_start()
@@ -275,3 +349,36 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
                 self.print_to_log_file("Pruning: validation composite가 patience 동안 개선되지 않아 조기 종료합니다.")
                 break
         self.on_train_end()
+
+    def run_training(self):
+        try:
+            self.on_train_start()
+            for _ in range(self.current_epoch, self.num_epochs):
+                self.on_epoch_start()
+                self.on_train_epoch_start()
+                train_outputs = [
+                    self.train_step(next(self.dataloader_train))
+                    for _ in range(self.num_iterations_per_epoch)
+                ]
+                self.on_train_epoch_end(train_outputs)
+                with torch.no_grad():
+                    self.on_validation_epoch_start()
+                    val_outputs = [
+                        self.validation_step(next(self.dataloader_val))
+                        for _ in range(self.num_val_iterations_per_epoch)
+                    ]
+                    self.on_validation_epoch_end(val_outputs)
+                self.on_epoch_end()
+                if self._stop_requested:
+                    self.print_to_log_file(
+                        "Pruning: composite가 patience 동안 개선되지 않아 조기 종료합니다."
+                    )
+                    break
+            self.on_train_end()
+            self._write_progress(
+                "early_stopped" if self._stop_requested else "completed",
+                self.current_epoch,
+            )
+        except BaseException as exc:
+            self._write_progress("failed", self.current_epoch, message=repr(exc))
+            raise

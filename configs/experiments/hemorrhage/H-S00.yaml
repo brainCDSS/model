@@ -1,3 +1,71 @@
-extends: H-S00-smoke.yaml
-training: {epochs: 300}
-model: {features: 16}
+experiment:
+  name: H-S00-segresnet-baseline
+  seed: 20260826
+  device: auto
+  output_dir: runs/segresnet/H-S00
+  manifest_path: C:/Datasets/hemorrhage/v1/metadata/common/06_preprocessing_manifest.csv
+
+data:
+  root_dir: C:/Datasets/hemorrhage/v1/model_ready/segresnet
+  # MONAI spatial order is [x, y, z].
+  patch_size: [160, 160, 32]
+  batch_size: 1
+  patches_per_volume: 2
+  positive_crop_weight: 2
+  negative_crop_weight: 1
+  num_workers: 2
+  cache_rate: 0.0
+  intensity_window: [-100.0, 200.0]
+
+model:
+  spatial_dims: 3
+  in_channels: 1
+  out_channels: 2
+  init_filters: 16
+  blocks_down: [1, 2, 2, 4]
+  blocks_up: [1, 1, 1]
+  dropout_prob: 0.0
+
+loss:
+  name: dice_ce
+  include_background: false
+  batch_dice: false
+  dice_weight: 1.0
+  ce_weight: 1.0
+
+optimizer:
+  name: adamw
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+
+scheduler:
+  name: cosine
+  min_learning_rate: 0.000001
+
+training:
+  epochs: 300
+  amp: true
+  validation_interval: 2
+  gradient_clip_norm: 12.0
+  # null: new run, auto: resume from runs/segresnet/H-S00/checkpoints/last.pt
+  resume: null
+
+inference:
+  patch_size: [160, 160, 32]
+  sliding_window_batch_size: 1
+  overlap: 0.5
+  blend_mode: gaussian
+  save_predictions: true
+
+checkpoint:
+  dice_weight: 0.5
+  recall_weight: 0.5
+  min_delta: 0.0001
+
+pruning:
+  enabled: true
+  monitor: composite
+  min_epochs: 50
+  # Patience is counted in validation checks. interval=2, so 30 checks = 60 epochs.
+  patience: 30
+  min_delta: 0.001

@@ -5,12 +5,12 @@ from pathlib import Path
 
 import torch
 
-from segresnet_baseline.checkpointing import config_sha256, load_checkpoint, load_model_state, sha256_file
-from segresnet_baseline.config import load_config, resolve_model_path
-from segresnet_baseline.data import build_split_loader, load_manifest
-from segresnet_baseline.inference import evaluate_loader, save_evaluation
-from segresnet_baseline.network import build_model
-from segresnet_baseline.reproducibility import seed_everything
+from brainon_ai.models.hemorrhage.segresnet.checkpointing import config_sha256, load_checkpoint, load_model_state, sha256_file
+from brainon_ai.models.hemorrhage.segresnet.config import load_config, resolve_model_path
+from brainon_ai.models.hemorrhage.segresnet.data import build_split_loader, load_manifest
+from brainon_ai.models.hemorrhage.segresnet.inference import evaluate_loader, save_evaluation
+from brainon_ai.models.hemorrhage.segresnet.network import build_model
+from brainon_ai.models.hemorrhage.segresnet.reproducibility import seed_everything
 
 
 def _resolve_checkpoint(value: str, checkpoint_dir: Path) -> Path:

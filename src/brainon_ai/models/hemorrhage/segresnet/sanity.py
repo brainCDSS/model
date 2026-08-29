@@ -4,11 +4,11 @@ import argparse
 
 import torch
 
-from segresnet_baseline.config import load_config, resolve_model_path
-from segresnet_baseline.data import build_loaders, build_train_transform, load_manifest, records_for_split
-from segresnet_baseline.losses import build_loss
-from segresnet_baseline.metrics import binary_case_metrics
-from segresnet_baseline.network import build_model
+from brainon_ai.models.hemorrhage.segresnet.config import load_config, resolve_model_path
+from brainon_ai.models.hemorrhage.segresnet.data import build_loaders, build_train_transform, load_manifest, records_for_split
+from brainon_ai.models.hemorrhage.segresnet.losses import build_loss
+from brainon_ai.models.hemorrhage.segresnet.metrics import binary_case_metrics
+from brainon_ai.models.hemorrhage.segresnet.network import build_model
 
 
 def main() -> None:

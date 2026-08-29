@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
+import os
+from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 
 import pandas as pd
 import torch
 from tqdm.auto import tqdm
 
-from segresnet_baseline.checkpointing import (
+from brainon_ai.models.hemorrhage.segresnet.checkpointing import (
     build_checkpoint,
     config_sha256,
     load_checkpoint,
@@ -17,13 +21,17 @@ from segresnet_baseline.checkpointing import (
     save_checkpoint,
     sha256_file,
 )
-from segresnet_baseline.config import load_config, resolve_model_path, save_resolved_config
-from segresnet_baseline.data import build_loaders, load_manifest
-from segresnet_baseline.inference import evaluate_loader, save_evaluation
-from segresnet_baseline.losses import build_loss
-from segresnet_baseline.network import build_model
-from segresnet_baseline.pruning import EarlyStopping
-from segresnet_baseline.reproducibility import seed_everything
+from brainon_ai.models.hemorrhage.segresnet.config import (
+    load_config,
+    resolve_model_path,
+    save_resolved_config,
+)
+from brainon_ai.models.hemorrhage.segresnet.data import build_loaders, load_manifest
+from brainon_ai.models.hemorrhage.segresnet.inference import evaluate_loader, save_evaluation
+from brainon_ai.models.hemorrhage.segresnet.losses import build_loss
+from brainon_ai.models.hemorrhage.segresnet.network import build_model
+from brainon_ai.models.hemorrhage.segresnet.pruning import EarlyStopping
+from brainon_ai.models.hemorrhage.segresnet.reproducibility import seed_everything
 
 
 def _device(config: dict, override: str | None) -> torch.device:
@@ -118,6 +126,16 @@ def _append_history(path: Path, row: dict) -> None:
     frame.to_csv(path, mode="a", header=not path.exists(), index=False, encoding="utf-8-sig")
 
 
+def _finite_or_none(value: float):
+    return float(value) if math.isfinite(value) else None
+
+
+def _write_progress(path: Path, payload: dict) -> None:
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+
+
 def _writer(log_dir: Path):
     try:
         from torch.utils.tensorboard import SummaryWriter
@@ -204,6 +222,7 @@ def run(args: argparse.Namespace) -> Path:
 
     run_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
+    progress_path = run_dir / "progress.json"
     save_resolved_config(config, run_dir / "config_resolved.yaml")
     manifest.to_csv(run_dir / "manifest_snapshot.csv", index=False, encoding="utf-8-sig")
     writer = _writer(run_dir / "tensorboard")
@@ -215,8 +234,59 @@ def run(args: argparse.Namespace) -> Path:
     print(f"device={device}, train={len(loaders['train'].dataset)}, validation={len(loaders['validation'].dataset)}")
     print(f"patch={config['data']['patch_size']}, batch={config['data']['batch_size']}, patches/volume={config['data']['patches_per_volume']}")
 
+    session_started = monotonic()
+    epoch_durations: list[float] = []
+    completed_epochs = start_epoch
+    should_stop = False
+    last_train_loss = float("nan")
+    last_metrics = {"dice": float("nan"), "recall": float("nan"), "composite": float("nan")}
+
+    def update_progress(status: str, completed_epochs: int, message: str | None = None) -> None:
+        mean_epoch_seconds = (
+            sum(epoch_durations) / len(epoch_durations) if epoch_durations else None
+        )
+        gpu_memory_gb = None
+        if device.type == "cuda":
+            gpu_memory_gb = round(torch.cuda.max_memory_allocated(device) / 1024**3, 3)
+        _write_progress(
+            progress_path,
+            {
+                "status": status,
+                "message": message,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "current_epoch": completed_epochs,
+                "total_epochs": epochs,
+                "progress_percent": round(100 * completed_epochs / epochs, 2),
+                "session_elapsed_seconds": round(monotonic() - session_started, 2),
+                "last_epoch_seconds": epoch_durations[-1] if epoch_durations else None,
+                "mean_epoch_seconds": mean_epoch_seconds,
+                "eta_seconds": (
+                    mean_epoch_seconds * max(0, epochs - completed_epochs)
+                    if mean_epoch_seconds
+                    else None
+                ),
+                "train_loss": _finite_or_none(last_train_loss),
+                "dice": _finite_or_none(last_metrics["dice"]),
+                "recall": _finite_or_none(last_metrics["recall"]),
+                "composite": _finite_or_none(last_metrics["composite"]),
+                "best_dice": _finite_or_none(best_metrics["dice"]),
+                "best_recall": _finite_or_none(best_metrics["recall"]),
+                "best_composite": _finite_or_none(best_metrics["composite"]),
+                "pruning_bad_checks": pruner.bad_checks,
+                "pruning_patience": pruner.patience,
+                "validation_interval": val_interval,
+                "batch_size": int(config["data"]["batch_size"]),
+                "patch_size": list(config["data"]["patch_size"]),
+                "gpu_max_memory_gb": gpu_memory_gb,
+                "output_folder": str(run_dir),
+            },
+        )
+
+    update_progress("running", start_epoch)
+
     try:
         for epoch in range(start_epoch, epochs):
+            epoch_started = monotonic()
             train_loss, steps = _train_epoch(
                 model,
                 loaders["train"],
@@ -228,6 +298,7 @@ def run(args: argparse.Namespace) -> Path:
                 clip_norm,
                 epoch,
             )
+            last_train_loss = train_loss
             global_step += steps
             scheduler.step()
             completed_epochs = epoch + 1
@@ -255,6 +326,7 @@ def run(args: argparse.Namespace) -> Path:
                 if not all(math.isfinite(value) for value in (dice, recall, composite)):
                     raise RuntimeError(f"validation 지표가 유한하지 않습니다: {summary}")
                 row.update({"dice": dice, "recall": recall, "composite": composite})
+                last_metrics.update({"dice": dice, "recall": recall, "composite": composite})
                 improved = {
                     "dice": dice > best_metrics["dice"] + checkpoint_delta,
                     "recall": recall > best_metrics["recall"] + checkpoint_delta,
@@ -304,6 +376,11 @@ def run(args: argparse.Namespace) -> Path:
 
             save_checkpoint(payload, checkpoint_dir / "last.pt")
             _append_history(history_path, row)
+            epoch_durations.append(round(monotonic() - epoch_started, 3))
+            update_progress(
+                "early_stopping" if should_stop else "running",
+                completed_epochs,
+            )
             if writer is not None:
                 writer.add_scalar("train/loss", train_loss, completed_epochs)
                 writer.add_scalar("train/learning_rate", optimizer.param_groups[0]["lr"], completed_epochs)
@@ -314,9 +391,14 @@ def run(args: argparse.Namespace) -> Path:
                     f"{pruner.min_delta} 이상 개선되지 않았습니다."
                 )
                 break
+    except BaseException as exc:
+        update_progress("failed", max(start_epoch, locals().get("completed_epochs", start_epoch)), repr(exc))
+        raise
     finally:
         if writer is not None:
             writer.close()
+
+    update_progress("early_stopped" if should_stop else "completed", completed_epochs)
 
     print(f"완료: {run_dir}")
     print("최종 test는 학습과 분리되어 있습니다. ich-segresnet-evaluate --split test 를 실행하세요.")
