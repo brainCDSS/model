@@ -6,10 +6,16 @@ from pathlib import Path
 
 import torch
 
-from segresnet_baseline.checkpointing import build_checkpoint, config_sha256, load_checkpoint, save_checkpoint
-from segresnet_baseline.inference import evaluate_loader
-from segresnet_baseline.metrics import binary_case_metrics, summarize_cases
-from segresnet_baseline.pruning import EarlyStopping
+# tests/test_core.py
+from brainon_ai.models.hemorrhage.segresnet.checkpointing import (
+    build_checkpoint,
+    config_sha256,
+    load_checkpoint,
+    save_checkpoint,
+)
+from brainon_ai.models.hemorrhage.segresnet.inference import evaluate_loader
+from brainon_ai.models.hemorrhage.segresnet.metrics import binary_case_metrics, summarize_cases
+from brainon_ai.models.hemorrhage.segresnet.pruning import EarlyStopping
 
 
 class MetricTests(unittest.TestCase):
