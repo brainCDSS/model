@@ -25,3 +25,7 @@ __pycache__/
 .ipynb_checkpoints/
 
 .cache/
+
+venv/
+*.py[cod]
+.mypy_cache/

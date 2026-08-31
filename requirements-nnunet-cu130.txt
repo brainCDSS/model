@@ -1,0 +1,44 @@
+# Target environment: Python 3.12 / Windows / NVIDIA RTX 4060 Ti / CUDA 13.0
+# The CUDA-enabled PyTorch wheel supplies its matching CUDA runtime libraries.
+--extra-index-url https://download.pytorch.org/whl/cu130
+
+# Core frameworks
+torch==2.13.0+cu130
+nnunetv2==2.8.1
+monai==1.6.0
+
+# Numerical / data
+numpy==2.5.2
+scipy==1.18.1
+pandas==3.0.5
+scikit-learn==1.9.0
+scikit-image==0.26.0
+
+# Medical imaging
+SimpleITK==2.5.6
+nibabel==5.4.2
+ImageIO==2.37.4
+
+# nnU-Net dependencies
+batchgenerators==0.25.3
+batchgeneratorsv2==0.3.5
+acvl_utils==0.2.6
+dynamic_network_architectures==0.4.4
+connected-components-3d==4.1.0
+blosc2==4.11.0
+
+# Training utilities
+tqdm==4.70.0
+tensorboard==2.21.0
+einops==0.8.2
+timm==1.0.22
+
+# Visualization and notebook monitoring
+matplotlib==3.11.1
+seaborn==0.13.2
+jupyterlab>=4,<5
+ipywidgets>=8,<9
+
+# Config / utility
+PyYAML==6.0.3
+packaging==26.3

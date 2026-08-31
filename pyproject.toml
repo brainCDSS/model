@@ -20,7 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 train = ["torch>=2.2"]
-monai = ["monai>=1.3"]
+monai = ["monai>=1.3", "pandas>=2,<3", "tqdm>=4.66,<5"]
 nnunet = ["nnunetv2>=2.4"]
 mlflow = ["mlflow>=2.12"]
 storage = ["google-cloud-storage>=2.16"]

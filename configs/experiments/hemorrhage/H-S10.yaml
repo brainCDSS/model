@@ -1,3 +1,75 @@
-extends: H-S00.yaml
-experiment_id: H-S10
-model: {name: segresnet_attention_gate}
+experiment:
+  name: H-S10-segresnet-attention-gate
+  seed: 20260826
+  device: auto
+  output_dir: runs/segresnet/H-S10
+  manifest_path: ../datasets/hemorrhage/v1/metadata/common/06_preprocessing_manifest.csv
+data:
+  root_dir: ../datasets/hemorrhage/v1/model_ready/segresnet
+  patch_size:
+  - 160
+  - 160
+  - 32
+  batch_size: 1
+  patches_per_volume: 2
+  positive_crop_weight: 2
+  negative_crop_weight: 1
+  num_workers: 0
+  cache_rate: 0.0
+  intensity_window:
+  - -100.0
+  - 200.0
+model:
+  name: segresnet_attention_gate
+  spatial_dims: 3
+  in_channels: 1
+  out_channels: 2
+  init_filters: 16
+  blocks_down:
+  - 1
+  - 2
+  - 2
+  - 4
+  blocks_up:
+  - 1
+  - 1
+  - 1
+  dropout_prob: 0.0
+loss:
+  name: dice_ce
+  include_background: false
+  batch_dice: false
+  dice_weight: 1.0
+  ce_weight: 1.0
+optimizer:
+  name: adamw
+  learning_rate: 0.0001
+  weight_decay: 1.0e-05
+scheduler:
+  name: cosine
+  min_learning_rate: 1.0e-06
+training:
+  epochs: 300
+  amp: true
+  validation_interval: 2
+  gradient_clip_norm: 12.0
+  resume: null
+inference:
+  patch_size:
+  - 160
+  - 160
+  - 32
+  sliding_window_batch_size: 1
+  overlap: 0.5
+  blend_mode: gaussian
+  save_predictions: true
+checkpoint:
+  dice_weight: 0.5
+  recall_weight: 0.5
+  min_delta: 0.0001
+pruning:
+  enabled: true
+  monitor: composite
+  min_epochs: 50
+  patience: 30
+  min_delta: 0.001
