@@ -1,0 +1,12 @@
+{
+  "data_root": "C:\\Users\\duddl\\OneDrive\\바탕 화면\\CTdata",
+  "affine_tolerance": 0.0001,
+  "small_lesion_voxels": 100,
+  "intensity_encoding_candidate": {
+    "min_at_least": 0,
+    "max_at_most": 4095,
+    "p99_above": 2000
+  },
+  "verify_physionet_sha256": true,
+  "integration_task": "binary_hemorrhage_segmentation"
+}
