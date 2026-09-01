@@ -1,0 +1,17 @@
+schema_version: 1
+name: hemorrhage_bhsd_only
+
+source_dataset:
+  dataset_id: 1
+  dataset_name: ICHBinary
+
+target_dataset:
+  dataset_id: 2
+  dataset_name: BHSDOnly
+
+case_prefix: BHSD_
+
+split:
+  preserve_existing_split: true
+
+copy_mode: hardlink
