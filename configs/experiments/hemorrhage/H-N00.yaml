@@ -14,7 +14,7 @@ plans:
   output_identifier: ICHPlansBaselineV1
   # 이 Dataset001 plan의 nnU-Net 내부(transposed) 축 순서는 [z, y, x]입니다.
   patch_size: [20, 320, 256]
-  batch_size: 1
+  batch_size: 2
 
 trainer:
   epochs: 1000
@@ -47,9 +47,10 @@ pruning:
   enabled: true
   monitor: composite
   min_epochs: 200
-  patience: 30
+  patience: 100
   min_delta: 0.001
 
 network:
   # default는 plans의 nnU-Net 구조를 사용합니다. 새 구조는 networks/factory.py에 등록합니다.
   name: default
+

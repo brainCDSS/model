@@ -51,6 +51,20 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         raise ValueError("plans.batch_size는 양수여야 합니다.")
     if int(config["trainer"].get("epochs", 0)) <= 0:
         raise ValueError("trainer.epochs는 양수여야 합니다.")
+    sampling = config.get("sampling", {})
+    if sampling.get("enabled", False):
+        thresholds = sampling.get("volume_thresholds_ml")
+        if not isinstance(thresholds, list) or len(thresholds) != 3:
+            raise ValueError("sampling.volume_thresholds_ml은 3개 값 목록이어야 합니다.")
+        thresholds = [float(value) for value in thresholds]
+        if thresholds != sorted(thresholds) or thresholds[0] <= 0:
+            raise ValueError("sampling 부피 기준은 양수이며 오름차순이어야 합니다.")
+        required = {"negative", "lt_1ml", "1_to_5ml", "5_to_20ml", "ge_20ml"}
+        weights = sampling.get("weights", {})
+        if not required.issubset(weights):
+            raise ValueError("sampling.weights에 모든 병변 크기 그룹이 필요합니다.")
+        if any(float(weights[name]) <= 0 for name in required):
+            raise ValueError("sampling.weights는 모두 0보다 커야 합니다.")
     config["_config_path"] = str(candidate)
     return config
 

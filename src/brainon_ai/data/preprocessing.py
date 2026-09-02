@@ -34,6 +34,41 @@ def decode_signed12(values: np.ndarray) -> np.ndarray:
     array = np.asarray(values, dtype=np.float32)
     return np.where(array > 2047, array - 4096, array).astype(np.float32, copy=False)
 
+def apply_ct_window(
+    values: np.ndarray,
+    *,
+    center: float,
+    width: float,
+) -> np.ndarray:
+    """CT HU를 지정된 window로 자르고 0~1 범위로 변환합니다."""
+
+    width = float(width)
+
+    if width <= 0:
+        raise ValueError(
+            f"window width는 양수여야 합니다: {width}"
+        )
+
+    center = float(center)
+    lower = center - width / 2.0
+    upper = center + width / 2.0
+
+    clipped = np.clip(
+        np.asarray(values, dtype=np.float32),
+        lower,
+        upper,
+    )
+
+    normalized = (
+        clipped - lower
+    ) / (
+        upper - lower
+    )
+
+    return normalized.astype(
+        np.float32,
+        copy=False,
+    )
 
 def image_with_data(data: np.ndarray, affine: np.ndarray, dtype) -> nib.Nifti1Image:
     """qform/sform을 동일한 affine로 정규화한 NIfTI 이미지를 만듭니다."""

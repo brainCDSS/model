@@ -18,10 +18,10 @@ plans:
 
 trainer:
   # H-N00과 동일하게 유지
-  epochs: 1000
+  epochs: 300
   iterations_per_epoch: 250
   validation_iterations_per_epoch: 50
-  save_every: 50
+  save_every: 10
   learning_rate: 0.01
   weight_decay: 0.00003
   oversample_foreground_percent: 0.33

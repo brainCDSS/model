@@ -15,12 +15,17 @@ from torch._dynamo import OptimizedModule
 
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import (
+    NonDetMultiThreadedAugmenter, SingleThreadedAugmenter, get_allowed_n_proc_DA,
+    infer_dataset_class, nnUNetDataLoader,
+)
 from nnunetv2.utilities.collate_outputs import collate_outputs
 
 from brainon_ai.nnunet.config import config_digest, load_config
 from brainon_ai.nnunet.losses import build_loss
 from brainon_ai.nnunet.networks import build_network
 from brainon_ai.nnunet.pruning import EarlyStopping
+from brainon_ai.nnunet.sampling.small_lesion import build_sampling_probabilities, write_sampling_report
 
 
 class nnUNetTrainerICHBaseline(nnUNetTrainer):
@@ -215,6 +220,57 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
 
     def _build_loss(self):
         return build_loss(self, self.ich_config["loss"])
+
+    def get_dataloaders(self):
+        if not self.ich_config.get("sampling", {}).get("enabled", False):
+            return super().get_dataloaders()
+        if self.dataset_class is None:
+            self.dataset_class = infer_dataset_class(self.preprocessed_dataset_folder)
+        patch_size = self.configuration_manager.patch_size
+        scales = self._get_deep_supervision_scales()
+        rotation, dummy_2d, initial_patch_size, mirror_axes = self.configure_rotation_dummyDA_mirroring_and_inital_patch_size()
+        tr_transforms = self.get_training_transforms(
+            patch_size, rotation, scales, mirror_axes, dummy_2d,
+            use_mask_for_norm=self.configuration_manager.use_mask_for_norm,
+            is_cascaded=self.is_cascaded, foreground_labels=self.label_manager.foreground_labels,
+            regions=self.label_manager.foreground_regions if self.label_manager.has_regions else None,
+            ignore_label=self.label_manager.ignore_label)
+        val_transforms = self.get_validation_transforms(
+            scales, is_cascaded=self.is_cascaded,
+            foreground_labels=self.label_manager.foreground_labels,
+            regions=self.label_manager.foreground_regions if self.label_manager.has_regions else None,
+            ignore_label=self.label_manager.ignore_label)
+        dataset_tr, dataset_val = self.get_tr_and_val_datasets()
+        probabilities, report = build_sampling_probabilities(
+            dataset_tr, self.configuration_manager.spacing, self.ich_config["sampling"])
+        if self.local_rank == 0:
+            write_sampling_report(Path(self.output_folder) / "small_lesion_sampling.json", report)
+            self.print_to_log_file(f"Small-lesion sampling groups: {report['group_summary']}")
+        dl_tr = nnUNetDataLoader(
+            dataset_tr, self.batch_size, initial_patch_size, patch_size, self.label_manager,
+            oversample_foreground_percent=self.oversample_foreground_percent,
+            sampling_probabilities=probabilities, pad_sides=None, transforms=tr_transforms,
+            probabilistic_oversampling=self.probabilistic_oversampling)
+        dl_val = nnUNetDataLoader(
+            dataset_val, self.batch_size, patch_size, patch_size, self.label_manager,
+            oversample_foreground_percent=self.oversample_foreground_percent,
+            sampling_probabilities=None, pad_sides=None, transforms=val_transforms,
+            probabilistic_oversampling=self.probabilistic_oversampling)
+        allowed = get_allowed_n_proc_DA()
+        if allowed == 0:
+            train_generator = SingleThreadedAugmenter(dl_tr, None)
+            val_generator = SingleThreadedAugmenter(dl_val, None)
+        else:
+            train_generator = NonDetMultiThreadedAugmenter(
+                data_loader=dl_tr, transform=None, num_processes=allowed, num_cached=max(6, allowed // 2),
+                seeds=None, pin_memory=self.device.type == "cuda", wait_time=0.002)
+            val_generator = NonDetMultiThreadedAugmenter(
+                data_loader=dl_val, transform=None, num_processes=max(1, allowed // 2),
+                num_cached=max(3, allowed // 4), seeds=None,
+                pin_memory=self.device.type == "cuda", wait_time=0.002)
+        _ = next(train_generator)
+        _ = next(val_generator)
+        return train_generator, val_generator
 
     def configure_optimizers(self):
         cfg = self.ich_config["trainer"]

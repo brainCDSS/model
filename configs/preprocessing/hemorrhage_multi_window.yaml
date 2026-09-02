@@ -1,0 +1,21 @@
+schema_version: 1
+release_id: hemorrhage_multiwindow_v1
+mode: multi_window
+
+orientation: RAS
+target_spacing_mm: [0.5, 0.5, 2.5]
+
+windows:
+  - name: brain
+    center: 40
+    width: 80
+  - name: subdural
+    center: 80
+    width: 200
+  - name: bone
+    center: 600
+    width: 2800
+
+mask:
+  threshold: 0
+  output_dtype: uint8q
