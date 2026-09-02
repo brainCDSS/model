@@ -1,7 +1,51 @@
 task: aneurysm
 release_id: topaneu2026_mra_v1.0.0
+
+# 기존 공용 CLI와 synthetic smoke 호환성을 위해 유지한다.
 dataset_id: Dataset103_AneurysmMra
+
 sources: [TopAneu 2026]
 official_source: "Use the official TopAneu 2026 distribution after accepting its terms."
-manifest_columns: [case_id, source_dataset, modality, image_paths, label_path, label_positive, shape, spacing, orientation, qc_status, exclusion_reason, split, sha256, data_release]
 
+manifest_columns:
+  - case_id
+  - center
+  - modality
+  - split
+  - location_image
+  - location_label
+  - type_image
+  - type_label
+
+segresnet_development_manifest_columns:
+  - case_id
+  - split
+  - image_path
+  - label_path
+  - location_json_path
+  - image_uri
+  - label_uri
+  - location_json_uri
+
+framework_views:
+  nnunet:
+    location: Dataset501_TopAneuMRA_Location
+    type: Dataset502_TopAneuMRA_Type
+
+  segresnet:
+    dataset: SegResNet_TopAneu_MRA
+    images: images
+    location_masks: location_masks
+    location_jsons: location_jsons
+    type_masks: type_masks
+
+frozen_split:
+  seed: 20260828
+  train: 215
+  validation: 46
+  test: 46
+
+  common_manifest_sha256: f2b6e29cf3119a25828012b48ee15b8345fae3bb53b8e7ecbb619f0bd9768ffd
+  common_split_info_sha256: b1ea64608af27973dd723e7b746ee41f26c5d54fbd47213097cc1f9c75d7f1e5
+  source_csv_sha256: 5f268b5231035934ec039ef00b62caff68751898cbd945b4b0b47dbc775466b4
+  source_json_sha256: 6e0b93727c9419bb107f6b74752102d81968ed1ff75d2a45ce9cfc8e75ba9279

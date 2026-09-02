@@ -1,3 +1,119 @@
-extends: A-S00-smoke.yaml
-training: {epochs: 300}
-model: {features: 16}
+task: aneurysm
+experiment_id: A-S00
+meaning: Standard SegResNet Location Baseline
+target: location
+data_release: topaneu2026_mra_v1.0.0
+
+experiment:
+  seed: 20260828
+  device: cuda
+  output_dir: ${BRAINON_RUN_ROOT:-../runs}/aneurysm/A-S00
+
+data:
+  root_dir: ${BRAINON_DATA_ROOT:-../data}/SegResNet_TopAneu_MRA
+  manifest_path: ${BRAINON_DATA_ROOT:-../data}/SegResNet_TopAneu_MRA/metadata/A-S00_manifest.csv
+  common_manifest_path: ${BRAINON_DATA_ROOT:-../data}/SegResNet_TopAneu_MRA/metadata/dataset_manifest.csv
+  split_info_path: ${BRAINON_DATA_ROOT:-../data}/SegResNet_TopAneu_MRA/metadata/split_info.json
+  split_seed: 20260828
+  common_manifest_sha256: f2b6e29cf3119a25828012b48ee15b8345fae3bb53b8e7ecbb619f0bd9768ffd
+  split_info_sha256: b1ea64608af27973dd723e7b746ee41f26c5d54fbd47213097cc1f9c75d7f1e5
+
+  # 아래 두 값은 Frozen Split 계보 확인용이다.
+  # SegResNet 학습 입력으로 nnU-Net 파일을 사용한다는 의미가 아니다.
+  frozen_split_source_csv_sha256: 5f268b5231035934ec039ef00b62caff68751898cbd945b4b0b47dbc775466b4
+  frozen_split_source_json_sha256: 6e0b93727c9419bb107f6b74752102d81968ed1ff75d2a45ce9cfc8e75ba9279
+
+  expected_train_cases: 215
+  expected_validation_cases: 46
+  fixed_test_cases: 46
+  expected_manifest_test_cases: 0
+
+  in_channels: 1
+  out_channels: 53
+  label_min: 0
+  label_max: 52
+  use_type_masks: false
+
+  # MONAI/NIfTI 순서는 [X, Y, Z].
+  # nnU-Net [Z, Y, X]=[80, 192, 128]과 같은 물리적 patch이다.
+  patch_size: [112, 160, 64]
+
+  # RTX 5090 full-patch smoke test 전까지 후보값이다.
+  # Smoke 통과 전에는 commit하지 않는다.
+  batch_size: 1
+
+  foreground_oversample_fraction: 0.33
+  num_workers: 0
+  normalization: nonzero_zscore
+
+model:
+  name: segresnet
+  spatial_dims: 3
+  in_channels: 1
+  out_channels: 53
+  init_filters: 16
+  blocks_down: [1, 2, 2, 4]
+  blocks_up: [1, 1, 1]
+  dropout_prob: 0.0
+
+loss:
+  name: dice_ce
+  include_background: false
+  batch_dice: true
+  dice_weight: 1.0
+  ce_weight: 1.0
+
+optimizer:
+  name: adamw
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+
+scheduler:
+  name: polynomial
+  power: 0.9
+  min_learning_rate: 0.000001
+
+training:
+  max_epochs: 300
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  amp: true
+  gradient_clip_norm: 12.0
+  progress_every_iterations: 25
+
+validation:
+  online_patch:
+    role: checkpoint_selection_and_early_stopping
+    monitor: ema_fg_dice
+    ema_alpha: 0.9
+
+  patient_full_volume:
+    every_epoch: false
+    schedule: once_after_training
+    checkpoint: checkpoint_best.pth
+    expected_cases: 46
+
+early_stopping:
+  enabled: true
+  monitor: ema_fg_dice
+  patience: 30
+  min_delta: 0.0001
+  start_epoch: 0
+
+resume:
+  mode: strict_last_completed_unit
+  checkpoint_every_train_iterations: 1
+  checkpoint_every_validation_iterations: 1
+  checkpoint_every_final_patient: 1
+  data_augmentation_workers: 0
+
+inference:
+  roi_size: [112, 160, 64]
+  sliding_window_batch_size: 1
+  overlap: 0.5
+  blend_mode: gaussian
+  save_predictions: true
+
+completion:
+  marker: final_validation/COMPLETE.json
+  require_process_return_code_zero: true

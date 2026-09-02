@@ -1,7 +1,29 @@
 task: aneurysm
 release_id: topaneu2026_mra_v1.0.0
+
+# 기존 공용 CLI와 synthetic smoke 호환성을 위해 유지한다.
 dataset_id: Dataset103_AneurysmMra
+
 modalities: [MRA]
-extras: [vessel_location_label, vessel_mask]
 channels: 1
 
+targets:
+  location:
+    classes: 53
+    background: 0
+    foreground_label_range: [1, 52]
+
+  type:
+    separate_training_target: true
+
+framework_views:
+  nnunet_location: Dataset501_TopAneuMRA_Location
+  nnunet_type: Dataset502_TopAneuMRA_Type
+  segresnet: SegResNet_TopAneu_MRA
+
+split:
+  seed: 20260828
+  train: 215
+  validation: 46
+  test: 46
+  regenerate: false
