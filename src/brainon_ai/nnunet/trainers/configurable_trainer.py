@@ -26,6 +26,9 @@ from brainon_ai.nnunet.losses import build_loss
 from brainon_ai.nnunet.networks import build_network
 from brainon_ai.nnunet.pruning import EarlyStopping
 from brainon_ai.nnunet.sampling.small_lesion import build_sampling_probabilities, write_sampling_report
+from brainon_ai.nnunet.sampling.component_patch import (
+    ComponentCenteredDataLoader, build_component_centers, write_component_report,
+)
 
 
 class nnUNetTrainerICHBaseline(nnUNetTrainer):
@@ -241,16 +244,33 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
             regions=self.label_manager.foreground_regions if self.label_manager.has_regions else None,
             ignore_label=self.label_manager.ignore_label)
         dataset_tr, dataset_val = self.get_tr_and_val_datasets()
-        probabilities, report = build_sampling_probabilities(
-            dataset_tr, self.configuration_manager.spacing, self.ich_config["sampling"])
+        sampling_config = self.ich_config["sampling"]
+        strategy = str(sampling_config.get("strategy", "case_weighted")).lower()
+        loader_class, loader_extra, probabilities = nnUNetDataLoader, {}, None
+        if strategy == "component_center":
+            centers, report = build_component_centers(
+                dataset_tr, self.configuration_manager.spacing, sampling_config)
+            loader_class = ComponentCenteredDataLoader
+            loader_extra["component_centers"] = centers
         if self.local_rank == 0:
-            write_sampling_report(Path(self.output_folder) / "small_lesion_sampling.json", report)
-            self.print_to_log_file(f"Small-lesion sampling groups: {report['group_summary']}")
-        dl_tr = nnUNetDataLoader(
+            write_component_report(
+                Path(self.output_folder) / "component_sampling.json",
+                report,
+            )
+            self.print_to_log_file(
+                f"Component-centered sampling: {report['num_components']} components"
+            )
+        else:
+            probabilities, report = build_sampling_probabilities(
+                dataset_tr, self.configuration_manager.spacing, sampling_config)
+            if self.local_rank == 0:
+                write_sampling_report(Path(self.output_folder) / "small_lesion_sampling.json", report)
+                self.print_to_log_file("Small-lesion case sampling enabled")
+        dl_tr = loader_class(
             dataset_tr, self.batch_size, initial_patch_size, patch_size, self.label_manager,
             oversample_foreground_percent=self.oversample_foreground_percent,
             sampling_probabilities=probabilities, pad_sides=None, transforms=tr_transforms,
-            probabilistic_oversampling=self.probabilistic_oversampling)
+            probabilistic_oversampling=self.probabilistic_oversampling, **loader_extra)
         dl_val = nnUNetDataLoader(
             dataset_val, self.batch_size, patch_size, patch_size, self.label_manager,
             oversample_foreground_percent=self.oversample_foreground_percent,
