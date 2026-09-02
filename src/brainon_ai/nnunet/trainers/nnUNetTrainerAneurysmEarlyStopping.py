@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import json
 import os
+import random
+import shutil
 import tempfile
 import time
 import warnings
@@ -157,8 +159,15 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
         # EARLY STOPPING
         # =====================================================
 
+        # A_N00_FINAL_POLICY_V2
+        #
+        # Full-volume Patient Validation is NOT performed
+        # during training epochs.
+        #
+        # Best / EarlyStopping use nnU-Net online patch
+        # validation EMA Dice.
         self.early_stopping_monitor = (
-            "val_patient_mean_dice"
+            "ema_fg_dice"
         )
 
         self.early_stopping_patience = int(
@@ -190,9 +199,30 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
         self._latest_patient_rows = None
         self._latest_class_rows = None
 
-        # Best checkpoint is intentionally independent from
-        # nnU-Net's default _best_ema pseudo-Dice criterion.
+        # Full-volume Patient Mean Dice is a FINAL reporting
+        # metric only. It no longer selects training checkpoints.
         self._best_patient_mean_dice = None
+
+        # =====================================================
+        # A_N00_FINAL_POLICY_V2
+        # Strict interruption resume
+        # =====================================================
+
+        self._resume_phase = "epoch_start"
+
+        self._resume_train_next_iteration = 0
+
+        self._resume_train_losses = []
+
+        # load_checkpoint happens before on_train_start when
+        # --c is used. on_train_start creates dataloaders and
+        # consumes RNG once. Therefore RNG is restored AFTER
+        # on_train_start.
+        self._pending_rng_state = None
+
+        # Final Full-volume Validation metadata
+        self._final_selected_best_epoch_1based = None
+        self._final_selected_best_ema = None
 
     # =========================================================
     # PATHS
@@ -246,6 +276,920 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     tmp_filename,
                     filename,
                 )
+
+
+    # =========================================================
+    # A_N00_FINAL_POLICY_V2
+    # STRICT INTERRUPTION RESUME
+    # =========================================================
+
+    @property
+    def interruption_resume_root(
+        self,
+    ) -> Path:
+
+        path = (
+            Path(
+                self.output_folder
+            )
+            / "interruption_resume"
+        )
+
+        path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return path
+
+
+    @property
+    def final_validation_root(
+        self,
+    ) -> Path:
+
+        path = (
+            Path(
+                self.output_folder
+            )
+            / "final_validation"
+        )
+
+        path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        return path
+
+
+    @property
+    def final_validation_resume_file(
+        self,
+    ) -> Path:
+
+        return (
+            self.final_validation_root
+            / "resume_state.pth"
+        )
+
+
+    @property
+    def final_validation_complete_file(
+        self,
+    ) -> Path:
+
+        return (
+            self.final_validation_root
+            / "COMPLETE.json"
+        )
+
+
+    def _online_val_resume_file(
+        self,
+        epoch=None,
+    ) -> Path:
+
+        if epoch is None:
+
+            epoch = (
+                self.current_epoch
+            )
+
+        return (
+            self.interruption_resume_root
+            / (
+                f"epoch_{epoch + 1:03d}"
+                "_online_val.pth"
+            )
+        )
+
+
+    @staticmethod
+    def _atomic_torch_save(
+        payload,
+        destination,
+    ) -> None:
+
+        destination = Path(
+            destination
+        )
+
+        destination.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        temporary = Path(
+            str(destination)
+            + ".tmp"
+        )
+
+        with temporary.open(
+            "wb"
+        ) as f:
+
+            torch.save(
+                payload,
+                f,
+            )
+
+            f.flush()
+
+            try:
+
+                os.fsync(
+                    f.fileno()
+                )
+
+            except OSError:
+
+                pass
+
+        os.replace(
+            temporary,
+            destination,
+        )
+
+
+    @staticmethod
+    def _capture_rng_state():
+
+        state = {
+            "python":
+                random.getstate(),
+
+            "numpy":
+                np.random.get_state(),
+
+            "torch_cpu":
+                torch.get_rng_state(),
+
+            "torch_cuda":
+                None,
+        }
+
+        if torch.cuda.is_available():
+
+            state[
+                "torch_cuda"
+            ] = (
+                torch.cuda.get_rng_state_all()
+            )
+
+        return state
+
+
+    @staticmethod
+    def _restore_rng_state(
+        state,
+    ) -> None:
+
+        if not state:
+
+            return
+
+        random.setstate(
+            state[
+                "python"
+            ]
+        )
+
+        np.random.set_state(
+            state[
+                "numpy"
+            ]
+        )
+
+        torch.set_rng_state(
+            state[
+                "torch_cpu"
+            ]
+        )
+
+        cuda_state = (
+            state.get(
+                "torch_cuda"
+            )
+        )
+
+        if (
+            cuda_state is not None
+            and torch.cuda.is_available()
+        ):
+
+            torch.cuda.set_rng_state_all(
+                cuda_state
+            )
+
+
+    def _restore_pending_rng_state(
+        self,
+    ) -> None:
+
+        if (
+            self._pending_rng_state
+            is None
+        ):
+
+            return
+
+        self._restore_rng_state(
+            self._pending_rng_state
+        )
+
+        self._pending_rng_state = None
+
+        self.print_to_log_file(
+            "[RESUME] RNG state restored "
+            "after dataloader initialization"
+        )
+
+
+    def _network_module_for_checkpoint(
+        self,
+    ):
+
+        if self.is_ddp:
+
+            mod = (
+                self.network.module
+            )
+
+        else:
+
+            mod = (
+                self.network
+            )
+
+        # nnUNet_compile=false for A-N00,
+        # but retain compatibility.
+        if hasattr(
+            mod,
+            "_orig_mod",
+        ):
+
+            mod = (
+                mod._orig_mod
+            )
+
+        return mod
+
+
+    def _save_strict_resume_checkpoint(
+        self,
+        phase: str,
+        train_next_iteration: int = 0,
+        train_losses=None,
+    ) -> None:
+        """
+        Mid-epoch checkpoint.
+
+        IMPORTANT:
+        Unlike official nnU-Net save_checkpoint(),
+        current_epoch is NOT incremented here.
+
+        Example:
+          current_epoch = 7
+          completed iteration = 183
+
+        checkpoint:
+          current_epoch = 7
+          next_iteration = 183
+
+        resume:
+          Epoch 8
+          next displayed iteration = 184/250
+        """
+
+        if (
+            self.local_rank != 0
+            or self.disable_checkpointing
+        ):
+
+            return
+
+        allowed = {
+            "train",
+            "online_val",
+            "epoch_end",
+        }
+
+        if phase not in allowed:
+
+            raise ValueError(
+                f"Invalid strict-resume phase: {phase}"
+            )
+
+        losses = (
+            []
+            if train_losses is None
+            else [
+                float(x)
+                for x
+                in train_losses
+            ]
+        )
+
+        mod = (
+            self._network_module_for_checkpoint()
+        )
+
+        checkpoint = {
+            # -----------------------------------------
+            # Official nnU-Net checkpoint fields
+            # -----------------------------------------
+
+            "network_weights":
+                mod.state_dict(),
+
+            "optimizer_state":
+                self.optimizer.state_dict(),
+
+            "grad_scaler_state":
+                (
+                    self.grad_scaler.state_dict()
+                    if self.grad_scaler
+                    is not None
+                    else None
+                ),
+
+            "logging":
+                self.logger.get_checkpoint(),
+
+            "_best_ema":
+                self._best_ema,
+
+            # CRITICAL:
+            # same epoch, not +1
+            "current_epoch":
+                int(
+                    self.current_epoch
+                ),
+
+            "init_args":
+                self.my_init_kwargs,
+
+            "trainer_name":
+                self.__class__.__name__,
+
+            "inference_allowed_mirroring_axes":
+                self.inference_allowed_mirroring_axes,
+
+            # -----------------------------------------
+            # A-N00 custom fields
+            # -----------------------------------------
+
+            "a_n00_final_policy_version":
+                2,
+
+            "a_n00_resume_phase":
+                phase,
+
+            "a_n00_train_next_iteration":
+                int(
+                    train_next_iteration
+                ),
+
+            "a_n00_train_losses":
+                losses,
+
+            "a_n00_rng_state":
+                self._capture_rng_state(),
+        }
+
+        destination = (
+            Path(
+                self.output_folder
+            )
+            / "checkpoint_latest.pth"
+        )
+
+        self._atomic_torch_save(
+            checkpoint,
+            destination,
+        )
+
+
+    def load_checkpoint(
+        self,
+        filename_or_checkpoint,
+    ) -> None:
+        """
+        Load both:
+          - official epoch-complete nnU-Net checkpoint
+          - A-N00 strict mid-epoch checkpoint
+        """
+
+        temporary_file = None
+
+        if isinstance(
+            filename_or_checkpoint,
+            (str, Path),
+        ):
+
+            checkpoint_path = Path(
+                filename_or_checkpoint
+            )
+
+            checkpoint = torch.load(
+                str(
+                    checkpoint_path
+                ),
+                map_location=self.device,
+                weights_only=False,
+            )
+
+            # Base nnU-Net expects a normal path.
+            super().load_checkpoint(
+                str(
+                    checkpoint_path
+                )
+            )
+
+        else:
+
+            checkpoint = (
+                filename_or_checkpoint
+            )
+
+            # Make dictionary loading compatible with
+            # nnU-Net 2.8.1 path-oriented implementation.
+            with tempfile.NamedTemporaryFile(
+                suffix=".pth",
+                delete=False,
+            ) as f:
+
+                temporary_file = Path(
+                    f.name
+                )
+
+            try:
+
+                torch.save(
+                    checkpoint,
+                    temporary_file,
+                )
+
+                super().load_checkpoint(
+                    str(
+                        temporary_file
+                    )
+                )
+
+            finally:
+
+                try:
+
+                    temporary_file.unlink()
+
+                except (
+                    FileNotFoundError,
+                    AttributeError,
+                ):
+
+                    pass
+
+
+        if (
+            checkpoint.get(
+                "a_n00_final_policy_version"
+            )
+            == 2
+        ):
+
+            self._resume_phase = (
+                checkpoint.get(
+                    "a_n00_resume_phase",
+                    "epoch_start",
+                )
+            )
+
+            self._resume_train_next_iteration = int(
+                checkpoint.get(
+                    "a_n00_train_next_iteration",
+                    0,
+                )
+            )
+
+            self._resume_train_losses = [
+                float(x)
+                for x
+                in checkpoint.get(
+                    "a_n00_train_losses",
+                    [],
+                )
+            ]
+
+            self._pending_rng_state = (
+                checkpoint.get(
+                    "a_n00_rng_state"
+                )
+            )
+
+            self.print_to_log_file(
+                "[RESUME LOAD] "
+                f"epoch="
+                f"{self.current_epoch + 1} | "
+                f"phase="
+                f"{self._resume_phase} | "
+                f"train_completed="
+                f"{self._resume_train_next_iteration}/"
+                f"{self.num_iterations_per_epoch}"
+            )
+
+        else:
+
+            # Official epoch-complete checkpoint.
+            self._resume_phase = (
+                "epoch_start"
+            )
+
+            self._resume_train_next_iteration = 0
+
+            self._resume_train_losses = []
+
+            self._pending_rng_state = None
+
+
+    # ---------------------------------------------------------
+    # Online patch-validation iteration resume
+    # ---------------------------------------------------------
+
+    def _save_online_val_resume_state(
+        self,
+        next_iteration: int,
+        val_outputs,
+    ) -> None:
+
+        if self.local_rank != 0:
+
+            return
+
+        payload = {
+            "epoch":
+                int(
+                    self.current_epoch
+                ),
+
+            "next_iteration":
+                int(
+                    next_iteration
+                ),
+
+            "val_outputs":
+                val_outputs,
+
+            "rng_state":
+                self._capture_rng_state(),
+        }
+
+        self._atomic_torch_save(
+            payload,
+            self._online_val_resume_file(),
+        )
+
+
+    def _load_online_val_resume_state(
+        self,
+    ):
+
+        path = (
+            self._online_val_resume_file()
+        )
+
+        if not path.is_file():
+
+            return None
+
+        state = torch.load(
+            path,
+            map_location="cpu",
+            weights_only=False,
+        )
+
+        if int(
+            state.get(
+                "epoch",
+                -1,
+            )
+        ) != int(
+            self.current_epoch
+        ):
+
+            return None
+
+        return state
+
+
+    def _clear_online_val_resume_state(
+        self,
+        epoch_0based,
+    ) -> None:
+
+        path = (
+            self._online_val_resume_file(
+                epoch_0based
+            )
+        )
+
+        try:
+
+            path.unlink()
+
+        except FileNotFoundError:
+
+            pass
+
+
+    # ---------------------------------------------------------
+    # Final 46-patient validation resume
+    # ---------------------------------------------------------
+
+    def _save_final_patient_resume_state(
+        self,
+        patient_rows,
+        class_counts,
+        negative_cases,
+        negative_case_fp,
+        completed_case_ids,
+    ) -> None:
+
+        if self.local_rank != 0:
+
+            return
+
+        payload = {
+            "policy_version":
+                2,
+
+            "selected_best_epoch_1based":
+                int(
+                    self._final_selected_best_epoch_1based
+                ),
+
+            "selected_best_ema":
+                (
+                    None
+                    if (
+                        self._final_selected_best_ema
+                        is None
+                    )
+                    else float(
+                        self._final_selected_best_ema
+                    )
+                ),
+
+            "patient_rows":
+                patient_rows,
+
+            "class_counts":
+                class_counts,
+
+            "negative_cases":
+                int(
+                    negative_cases
+                ),
+
+            "negative_case_fp":
+                int(
+                    negative_case_fp
+                ),
+
+            "completed_case_ids":
+                list(
+                    completed_case_ids
+                ),
+        }
+
+        self._atomic_torch_save(
+            payload,
+            self.final_validation_resume_file,
+        )
+
+
+    def _load_final_patient_resume_state(
+        self,
+    ):
+
+        path = (
+            self.final_validation_resume_file
+        )
+
+        if not path.is_file():
+
+            return None
+
+        state = torch.load(
+            path,
+            map_location="cpu",
+            weights_only=False,
+        )
+
+        if (
+            int(
+                state.get(
+                    "policy_version",
+                    -1,
+                )
+            )
+            != 2
+        ):
+
+            return None
+
+        state_epoch = int(
+            state.get(
+                "selected_best_epoch_1based",
+                -1,
+            )
+        )
+
+        if (
+            state_epoch
+            != int(
+                self._final_selected_best_epoch_1based
+            )
+        ):
+
+            raise RuntimeError(
+                "Final Patient Validation resume state의 "
+                "Best epoch이 현재 checkpoint_best와 다릅니다."
+            )
+
+        return state
+
+
+    def _clear_final_patient_resume_state(
+        self,
+    ) -> None:
+
+        try:
+
+            self.final_validation_resume_file.unlink()
+
+        except FileNotFoundError:
+
+            pass
+
+
+    # ---------------------------------------------------------
+    # Final metric output
+    # ---------------------------------------------------------
+
+    def _write_final_validation_outputs(
+        self,
+        metrics,
+        patient_rows,
+        class_rows,
+    ) -> None:
+
+        if self.local_rank != 0:
+
+            return
+
+        root = (
+            self.final_validation_root
+        )
+
+        self._write_csv(
+            root
+            / "per_patient_metrics.csv",
+            patient_rows,
+        )
+
+        self._write_csv(
+            root
+            / "per_class_metrics.csv",
+            class_rows,
+        )
+
+        summary = {
+            key:
+                self._json_value(
+                    value
+                )
+            for key, value
+            in metrics.items()
+        }
+
+        summary.update(
+            {
+                "validation_policy":
+                    "once_after_training",
+
+                "validated_checkpoint":
+                    "checkpoint_best.pth",
+
+                "checkpoint_selection_monitor":
+                    "ema_fg_dice",
+
+                "selected_best_epoch_1based":
+                    int(
+                        self._final_selected_best_epoch_1based
+                    ),
+
+                "selected_best_ema_fg_dice":
+                    self._json_value(
+                        self._final_selected_best_ema
+                    ),
+
+                "expected_validation_cases":
+                    int(
+                        self.expected_validation_cases
+                    ),
+
+                "patient_macro_policy":
+                    (
+                        "GT-present Location classes "
+                        "per patient only"
+                    ),
+            }
+        )
+
+        summary_tmp = (
+            root
+            / "summary.json.tmp"
+        )
+
+        summary_file = (
+            root
+            / "summary.json"
+        )
+
+        with summary_tmp.open(
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                summary,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+            f.flush()
+
+        os.replace(
+            summary_tmp,
+            summary_file,
+        )
+
+        # COMPLETE is written LAST.
+        # Its presence means all final CSV/JSON outputs exist.
+        complete_tmp = (
+            root
+            / "COMPLETE.json.tmp"
+        )
+
+        complete_file = (
+            root
+            / "COMPLETE.json"
+        )
+
+        complete_payload = {
+            "status":
+                "COMPLETE",
+
+            "validated_checkpoint":
+                "checkpoint_best.pth",
+
+            "selected_best_epoch_1based":
+                int(
+                    self._final_selected_best_epoch_1based
+                ),
+
+            "selected_best_ema_fg_dice":
+                self._json_value(
+                    self._final_selected_best_ema
+                ),
+
+            "validation_cases":
+                len(
+                    patient_rows
+                ),
+        }
+
+        with complete_tmp.open(
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                complete_payload,
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
+
+            f.flush()
+
+        os.replace(
+            complete_tmp,
+            complete_file,
+        )
+
 
     # =========================================================
     # METRIC HELPERS
@@ -736,16 +1680,19 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
     # RESUME STATE
     # =========================================================
 
-    def _restore_patient_best_from_history(
+    def _restore_ema_best_from_history(
         self,
     ) -> None:
+        """
+        Safety reconciliation between CSV history and checkpoint.
+        """
 
         path = (
             self.training_history_file
         )
 
         if not path.exists():
-            self._best_patient_mean_dice = None
+
             return
 
         scores = []
@@ -763,7 +1710,7 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             for row in reader:
 
                 raw = row.get(
-                    "val_patient_mean_dice",
+                    "online_patch_ema_fg_dice",
                     "",
                 )
 
@@ -771,10 +1718,12 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     "",
                     None,
                 }:
+
                     continue
 
                 try:
-                    score = float(
+
+                    value = float(
                         raw
                     )
 
@@ -782,20 +1731,33 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     TypeError,
                     ValueError,
                 ):
+
                     continue
 
                 if np.isfinite(
-                    score
+                    value
                 ):
+
                     scores.append(
-                        score
+                        value
                     )
 
-        self._best_patient_mean_dice = (
-            max(scores)
-            if scores
-            else None
-        )
+        if scores:
+
+            history_best = max(
+                scores
+            )
+
+            if (
+                self._best_ema is None
+                or history_best
+                > self._best_ema
+            ):
+
+                self._best_ema = (
+                    history_best
+                )
+
 
     # =========================================================
     # EARLY STOPPING
@@ -810,6 +1772,7 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
         )
 
         if not path.exists():
+
             return []
 
         history = []
@@ -832,11 +1795,12 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                 )
 
                 raw_score = row.get(
-                    "val_patient_mean_dice",
+                    "online_patch_ema_fg_dice",
                     "",
                 )
 
                 try:
+
                     epoch = int(
                         raw_epoch
                     )
@@ -845,15 +1809,18 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     TypeError,
                     ValueError,
                 ):
+
                     continue
 
                 if (
                     epoch
                     < self.early_stopping_start_epoch
                 ):
+
                     continue
 
                 try:
+
                     score = float(
                         raw_score
                     )
@@ -862,6 +1829,7 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     TypeError,
                     ValueError,
                 ):
+
                     score = float(
                         "nan"
                     )
@@ -872,14 +1840,15 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
 
         return history
 
+
     def _calculate_early_stopping_state(
         self,
     ):
         """
         min_delta affects the EarlyStopping reset criterion.
 
-        Best checkpoint itself always represents the true maximum
-        val_patient_mean_dice observed so far.
+        Best checkpoint represents the true maximum
+        online patch ema_fg_dice observed so far.
         """
 
         history = (
@@ -1051,6 +2020,19 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     int(value)
                 ] = name
 
+        if (
+            self._final_selected_best_epoch_1based
+            is None
+        ):
+            raise RuntimeError(
+                "Final Validation 시작 전 "
+                "selected best epoch이 설정되지 않았습니다."
+            )
+
+        selected_best_epoch_1based = int(
+            self._final_selected_best_epoch_1based
+        )
+
         class_counts = {
             label: {
                 "tp": 0,
@@ -1063,10 +2045,69 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             in foreground_labels
         }
 
-        patient_rows = []
+        # =====================================================
+        # FINAL PATIENT VALIDATION RESUME
+        # =====================================================
 
-        negative_cases = 0
-        negative_case_fp = 0
+        final_resume_state = (
+            self._load_final_patient_resume_state()
+        )
+
+        if final_resume_state is None:
+
+            patient_rows = []
+
+            negative_cases = 0
+            negative_case_fp = 0
+
+            completed_case_ids = set()
+
+            resumed_patient_count = 0
+
+        else:
+
+            patient_rows = list(
+                final_resume_state[
+                    "patient_rows"
+                ]
+            )
+
+            class_counts = (
+                final_resume_state[
+                    "class_counts"
+                ]
+            )
+
+            negative_cases = int(
+                final_resume_state[
+                    "negative_cases"
+                ]
+            )
+
+            negative_case_fp = int(
+                final_resume_state[
+                    "negative_case_fp"
+                ]
+            )
+
+            completed_case_ids = set(
+                final_resume_state[
+                    "completed_case_ids"
+                ]
+            )
+
+            resumed_patient_count = len(
+                completed_case_ids
+            )
+
+            self.print_to_log_file(
+                "[FINAL-PATIENT-VAL RESUME] "
+                f"completed="
+                f"{resumed_patient_count}/"
+                f"{len(val_keys)} | "
+                f"next patient="
+                f"{resumed_patient_count + 1}"
+            )
 
         self.set_deep_supervision_enabled(
             False
@@ -1135,10 +2176,20 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     tmp_dir_string
                 )
 
+                validation_identifiers = list(
+                    dataset_val.identifiers
+                )
+
                 for patient_index, case_id in enumerate(
-                    dataset_val.identifiers,
+                    validation_identifiers,
                     start=1,
                 ):
+
+                    if (
+                        case_id
+                        in completed_case_ids
+                    ):
+                        continue
 
                     patient_start = (
                         time.perf_counter()
@@ -1431,10 +2482,10 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
 
                     patient_row = {
                         "epoch_0based":
-                            self.current_epoch,
+                            selected_best_epoch_1based - 1,
 
                         "epoch_1based":
-                            self.current_epoch + 1,
+                            selected_best_epoch_1based,
 
                         "case_id":
                             case_id,
@@ -1454,19 +2505,48 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                         patient_row
                     )
 
+                    completed_case_ids.add(
+                        case_id
+                    )
+
+                    # -----------------------------------------
+                    # Persist immediately after this patient.
+                    #
+                    # If runtime dies during NEXT patient,
+                    # this completed patient is never repeated.
+                    # -----------------------------------------
+
+                    self._save_final_patient_resume_state(
+                        patient_rows=patient_rows,
+                        class_counts=class_counts,
+                        negative_cases=negative_cases,
+                        negative_case_fp=negative_case_fp,
+                        completed_case_ids=completed_case_ids,
+                    )
+
                     elapsed = (
                         time.perf_counter()
                         - epoch_start
                     )
 
+                    completed_total = len(
+                        patient_rows
+                    )
+
+                    completed_this_session = max(
+                        1,
+                        completed_total
+                        - resumed_patient_count,
+                    )
+
                     avg_patient_seconds = (
                         elapsed
-                        / patient_index
+                        / completed_this_session
                     )
 
                     remaining = (
                         len(val_keys)
-                        - patient_index
+                        - completed_total
                     )
 
                     eta_seconds = (
@@ -1475,11 +2555,11 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                     )
 
                     if (
-                        patient_index
+                        completed_total
                         % self.patient_progress_every
                         == 0
 
-                        or patient_index
+                        or completed_total
                         == len(val_keys)
                     ):
 
@@ -1497,16 +2577,13 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
 
                         pct = (
                             100.0
-                            * patient_index
+                            * completed_total
                             / len(val_keys)
                         )
 
                         print(
-                            "[PATIENT-VAL] "
-                            f"Epoch "
-                            f"{self.current_epoch + 1}/"
-                            f"{self.num_epochs} | "
-                            f"{patient_index}/"
+                            "[FINAL-PATIENT-VAL] "
+                            f"{completed_total}/"
                             f"{len(val_keys)} "
                             f"({pct:.1f}%) | "
                             f"case={case_id} | "
@@ -1849,8 +2926,8 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
         )
 
         self.print_to_log_file(
-            "\n[PATIENT-VAL SUMMARY] "
-            f"Epoch {self.current_epoch + 1} | "
+            "\n[FINAL-PATIENT-VAL SUMMARY] "
+            f"BestEpoch={selected_best_epoch_1based} | "
             f"PatientMeanDice="
             f"{self._format_metric(patient_mean_dice)} | "
             f"PatientMedianDice="
@@ -1890,33 +2967,44 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             self.current_epoch,
         )
 
-        train_loss = (
+        train_loss = float(
             self.logger.get_value(
                 "train_losses",
                 step=-1,
             )
         )
 
-        val_loss = (
+        val_loss = float(
             self.logger.get_value(
                 "val_losses",
                 step=-1,
             )
         )
 
-        online_dice = (
+        online_dice = float(
             self.logger.get_value(
                 "mean_fg_dice",
                 step=-1,
             )
         )
 
-        ema_online_dice = (
+        ema_online_dice = float(
             self.logger.get_value(
                 "ema_fg_dice",
                 step=-1,
             )
         )
+
+
+        if not np.isfinite(
+            ema_online_dice
+        ):
+
+            raise RuntimeError(
+                "ema_fg_dice is not finite. "
+                "Best checkpoint cannot be selected."
+            )
+
 
         self.print_to_log_file(
             "train_loss",
@@ -1935,54 +3023,51 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
         )
 
         self.print_to_log_file(
-            "online_patch_pseudo_dice",
+            "online_patch_mean_fg_dice",
             np.round(
                 online_dice,
                 decimals=4,
             ),
-            "(diagnostic only)",
         )
 
-        if self._latest_patient_metrics is None:
-            raise RuntimeError(
-                "Patient full-volume validation metrics "
-                "were not generated before on_epoch_end."
-            )
-
-        patient_score = float(
-            self._latest_patient_metrics[
-                "val_patient_mean_dice"
-            ]
+        self.print_to_log_file(
+            "online_patch_ema_fg_dice",
+            np.round(
+                ema_online_dice,
+                decimals=4,
+            ),
+            "(Best / EarlyStopping monitor)",
         )
 
-        if not np.isfinite(
-            patient_score
-        ):
-            raise RuntimeError(
-                "val_patient_mean_dice is not finite. "
-                "Best checkpoint cannot be selected."
-            )
+
+        # =====================================================
+        # BEST CHECKPOINT = TRUE MAX ema_fg_dice
+        #
+        # min_delta is ONLY for EarlyStopping reset.
+        # =====================================================
 
         previous_best = (
-            self._best_patient_mean_dice
+            self._best_ema
         )
 
         is_new_best = (
             previous_best is None
-            or patient_score
-            > previous_best
+            or ema_online_dice
+            > float(
+                previous_best
+            )
         )
 
         if is_new_best:
 
-            self._best_patient_mean_dice = (
-                patient_score
+            self._best_ema = (
+                ema_online_dice
             )
 
             self.print_to_log_file(
                 "[BEST] New best "
-                "val_patient_mean_dice="
-                f"{patient_score:.6f}"
+                f"ema_fg_dice="
+                f"{ema_online_dice:.6f}"
             )
 
             self.save_checkpoint(
@@ -1994,30 +3079,8 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                 )
             )
 
-        # Periodic/latest checkpoint
-        if (
-            (
-                self.current_epoch + 1
-            )
-            % self.save_every
-            == 0
 
-            and self.current_epoch
-            != (
-                self.num_epochs - 1
-            )
-        ):
-
-            self.save_checkpoint(
-                str(
-                    Path(
-                        self.output_folder
-                    )
-                    / "checkpoint_latest.pth"
-                )
-            )
-
-        epoch_seconds = (
+        epoch_seconds = float(
             self.logger.get_value(
                 "epoch_end_timestamps",
                 step=-1,
@@ -2033,100 +3096,44 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             f"{epoch_seconds:.2f} s"
         )
 
-        # -----------------------------------------------------
-        # Persist patient/class metrics + one-row epoch history
-        # -----------------------------------------------------
 
-        self._write_epoch_outputs(
-            metrics=(
-                self._latest_patient_metrics
-            ),
-            patient_rows=(
-                self._latest_patient_rows
-            ),
-            class_rows=(
-                self._latest_class_rows
-            ),
-            is_best=is_new_best,
-        )
+        # =====================================================
+        # TRAINING HISTORY
+        #
+        # There are intentionally NO Patient Full-volume
+        # metrics in per-epoch history anymore.
+        # =====================================================
 
         history_row = {
             "epoch_0based":
-                self.current_epoch,
+                int(
+                    self.current_epoch
+                ),
 
             "epoch_1based":
-                self.current_epoch + 1,
+                int(
+                    self.current_epoch + 1
+                ),
 
             "monitor":
-                self.early_stopping_monitor,
+                "ema_fg_dice",
 
             "train_loss":
-                float(
-                    train_loss
-                ),
+                train_loss,
 
             "online_val_loss":
-                float(
-                    val_loss
-                ),
+                val_loss,
 
             "online_patch_mean_fg_dice":
-                float(
-                    online_dice
-                ),
+                online_dice,
 
             "online_patch_ema_fg_dice":
+                ema_online_dice,
+
+            "best_ema_fg_dice":
                 float(
-                    ema_online_dice
+                    self._best_ema
                 ),
-
-            "val_patient_mean_dice":
-                self._latest_patient_metrics[
-                    "val_patient_mean_dice"
-                ],
-
-            "val_patient_median_dice":
-                self._latest_patient_metrics[
-                    "val_patient_median_dice"
-                ],
-
-            "val_patient_mean_macro_dice":
-                self._latest_patient_metrics[
-                    "val_patient_mean_macro_dice"
-                ],
-
-            "val_patient_mean_precision":
-                self._latest_patient_metrics[
-                    "val_patient_mean_precision"
-                ],
-
-            "val_patient_mean_recall":
-                self._latest_patient_metrics[
-                    "val_patient_mean_recall"
-                ],
-
-            "val_macro_dice":
-                self._latest_patient_metrics[
-                    "val_macro_dice"
-                ],
-
-            "val_macro_precision":
-                self._latest_patient_metrics[
-                    "val_macro_precision"
-                ],
-
-            "val_macro_recall":
-                self._latest_patient_metrics[
-                    "val_macro_recall"
-                ],
-
-            "negative_case_fp_rate":
-                self._latest_patient_metrics[
-                    "negative_case_fp_rate"
-                ],
-
-            "best_patient_mean_dice":
-                self._best_patient_mean_dice,
 
             "is_best":
                 int(
@@ -2134,21 +3141,43 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                 ),
 
             "epoch_seconds":
-                float(
-                    epoch_seconds
-                ),
+                epoch_seconds,
         }
 
         self._upsert_training_history(
             history_row
         )
 
+
+        # =====================================================
+        # EPOCH-COMPLETE CHECKPOINT
+        #
+        # Always write latest, INCLUDING the final epoch.
+        #
+        # Official save_checkpoint stores current_epoch + 1,
+        # which is exactly what we want after a fully completed
+        # epoch.
+        # =====================================================
+
+        self.save_checkpoint(
+            str(
+                Path(
+                    self.output_folder
+                )
+                / "checkpoint_latest.pth"
+            )
+        )
+
+
         if self.local_rank == 0:
+
             self.logger.plot_progress_png(
                 self.output_folder
             )
 
+
         self.current_epoch += 1
+
 
     # =========================================================
     # TRAINING LOOP
@@ -2158,304 +3187,883 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
         self,
     ):
 
+        # =====================================================
+        # INITIALIZE
+        # =====================================================
+
         self.on_train_start()
 
-        # Restore best score from CSV when resuming with --c.
-        self._restore_patient_best_from_history()
+        # get_dataloaders() prefetches one train + one val batch.
+        # Undo those RNG effects when --c restored a strict
+        # mid-epoch checkpoint.
+        self._restore_pending_rng_state()
+
+        self._restore_ema_best_from_history()
+
 
         self.print_to_log_file(
-            "\n=============================================="
+            "\n"
+            + "=" * 62
         )
 
         self.print_to_log_file(
-            "A-N00 Standard nnU-Net "
-            "Patient-Level Validation Policy"
+            "A-N00 FINAL TRAINING POLICY V2"
         )
 
         self.print_to_log_file(
-            f"Max epochs          : "
+            f"Max epochs           : "
             f"{self.num_epochs}"
         )
 
         self.print_to_log_file(
-            f"Train iterations     : "
+            f"Train iterations      : "
             f"{self.num_iterations_per_epoch}"
         )
 
         self.print_to_log_file(
-            f"Online val iterations: "
-            f"{self.num_val_iterations_per_epoch} "
-            "(diagnostic only)"
+            f"Online val iterations : "
+            f"{self.num_val_iterations_per_epoch}"
         )
 
         self.print_to_log_file(
-            f"Full-volume val cases: "
-            f"{self.expected_validation_cases}"
+            "Best monitor          : "
+            "ema_fg_dice"
         )
 
         self.print_to_log_file(
-            f"Best/EarlyStop metric: "
-            f"{self.early_stopping_monitor}"
+            "EarlyStopping monitor : "
+            "ema_fg_dice"
         )
 
         self.print_to_log_file(
-            f"Patience            : "
+            f"Patience              : "
             f"{self.early_stopping_patience}"
         )
 
         self.print_to_log_file(
-            f"Min delta           : "
+            f"Min delta             : "
             f"{self.early_stopping_min_delta}"
         )
 
         self.print_to_log_file(
-            "==============================================\n"
+            "Full-volume per epoch : DISABLED"
         )
 
-        for _ in range(
-            self.current_epoch,
-            self.num_epochs,
+        self.print_to_log_file(
+            "Final Full-volume Val : "
+            "46 patients ONCE after training"
+        )
+
+        self.print_to_log_file(
+            "Final Val checkpoint  : "
+            "checkpoint_best.pth"
+        )
+
+        self.print_to_log_file(
+            "Train Resume          : "
+            "1 completed iteration"
+        )
+
+        self.print_to_log_file(
+            "Online-Val Resume     : "
+            "1 completed iteration"
+        )
+
+        self.print_to_log_file(
+            "Final Patient Resume  : "
+            "1 completed patient"
+        )
+
+        self.print_to_log_file(
+            "=" * 62
+            + "\n"
+        )
+
+
+        # =====================================================
+        # Was EarlyStopping already reached before a resumed
+        # final-validation session?
+        # =====================================================
+
+        early_stop_already_reached = False
+
+        if (
+            self.current_epoch > 0
+            and self._monitor_history()
         ):
 
-            self.on_epoch_start()
-
-            # =================================================
-            # TRAIN
-            # =================================================
-
-            self.on_train_epoch_start()
-
-            train_outputs = []
-
-            train_start = (
-                time.perf_counter()
+            _, bad_epochs = (
+                self._calculate_early_stopping_state()
             )
 
-            for batch_id in range(
-                self.num_iterations_per_epoch
+            early_stop_already_reached = (
+                bad_epochs
+                >= self.early_stopping_patience
+            )
+
+
+        # =====================================================
+        # TRAINING LOOP
+        # =====================================================
+
+        if not early_stop_already_reached:
+
+            while (
+                self.current_epoch
+                < self.num_epochs
             ):
 
-                output = self.train_step(
-                    next(
-                        self.dataloader_train
-                    )
+                phase = (
+                    self._resume_phase
                 )
 
-                train_outputs.append(
-                    output
-                )
+                if phase not in {
+                    "epoch_start",
+                    "train",
+                    "online_val",
+                    "epoch_end",
+                }:
 
-                step = (
-                    batch_id + 1
-                )
-
-                if (
-                    step
-                    % self.progress_every
-                    == 0
-
-                    or step
-                    == self.num_iterations_per_epoch
-                ):
-
-                    elapsed = (
-                        time.perf_counter()
-                        - train_start
+                    raise RuntimeError(
+                        f"Invalid resume phase: {phase}"
                     )
 
-                    eta = (
-                        (
-                            elapsed
-                            / step
-                        )
-                        * (
-                            self.num_iterations_per_epoch
-                            - step
-                        )
+
+                # =============================================
+                # FRESH EPOCH
+                # =============================================
+
+                if phase == "epoch_start":
+
+                    self.on_epoch_start()
+
+                    self.on_train_epoch_start()
+
+                    train_start_iteration = 0
+
+                    train_outputs = []
+
+                    phase = "train"
+
+
+                # =============================================
+                # RESUME TRAIN
+                # =============================================
+
+                elif phase == "train":
+
+                    train_start_iteration = int(
+                        self._resume_train_next_iteration
                     )
 
-                    running_loss = float(
-                        np.mean(
-                            [
-                                float(
-                                    x["loss"]
+                    train_outputs = [
+                        {
+                            "loss":
+                                np.asarray(
+                                    value,
+                                    dtype=np.float32,
                                 )
-                                for x
-                                in train_outputs
-                            ]
+                        }
+                        for value
+                        in self._resume_train_losses
+                    ]
+
+                    if (
+                        len(
+                            train_outputs
                         )
-                    )
+                        != train_start_iteration
+                    ):
 
-                    pct = (
-                        100.0
-                        * step
-                        / self.num_iterations_per_epoch
-                    )
+                        raise RuntimeError(
+                            "Strict resume train loss count "
+                            "mismatch: "
+                            f"losses="
+                            f"{len(train_outputs)}, "
+                            f"completed="
+                            f"{train_start_iteration}"
+                        )
 
-                    print(
-                        "[TRAIN] "
+                    # Network mode is not checkpoint state.
+                    # Set it without re-running LR scheduler.
+                    self.network.train()
+
+                    self.print_to_log_file(
+                        "[TRAIN RESUME] "
                         f"Epoch "
                         f"{self.current_epoch + 1}/"
                         f"{self.num_epochs} | "
-                        f"{step}/"
-                        f"{self.num_iterations_per_epoch} "
-                        f"({pct:.1f}%) | "
-                        f"loss={running_loss:.6f} | "
-                        f"ETA={eta / 60.0:.1f} min",
-                        flush=True,
+                        f"completed="
+                        f"{train_start_iteration}/"
+                        f"{self.num_iterations_per_epoch} | "
+                        f"next="
+                        f"{train_start_iteration + 1}/"
+                        f"{self.num_iterations_per_epoch}"
                     )
 
-            self.on_train_epoch_end(
-                train_outputs
-            )
 
-            # =================================================
-            # ONLINE PATCH VALIDATION
-            #
-            # Diagnostic only.
-            # Does NOT select checkpoint_best.
-            # =================================================
+                else:
 
-            with torch.no_grad():
-
-                self.on_validation_epoch_start()
-
-                val_outputs = []
-
-                val_start = (
-                    time.perf_counter()
-                )
-
-                for batch_id in range(
-                    self.num_val_iterations_per_epoch
-                ):
-
-                    output = (
-                        self.validation_step(
-                            next(
-                                self.dataloader_val
-                            )
-                        )
+                    train_start_iteration = (
+                        self.num_iterations_per_epoch
                     )
 
-                    val_outputs.append(
-                        output
+                    train_outputs = []
+
+
+                # =============================================
+                # TRAIN ITERATIONS
+                # =============================================
+
+                if phase == "train":
+
+                    train_session_start = (
+                        time.perf_counter()
                     )
 
-                    step = (
-                        batch_id + 1
-                    )
-
-                    if (
-                        step
-                        % self.progress_every
-                        == 0
-
-                        or step
-                        == self.num_val_iterations_per_epoch
+                    for batch_id in range(
+                        train_start_iteration,
+                        self.num_iterations_per_epoch,
                     ):
 
-                        elapsed = (
-                            time.perf_counter()
-                            - val_start
-                        )
-
-                        eta = (
-                            (
-                                elapsed
-                                / step
-                            )
-                            * (
-                                self.num_val_iterations_per_epoch
-                                - step
+                        output = (
+                            self.train_step(
+                                next(
+                                    self.dataloader_train
+                                )
                             )
                         )
 
-                        running_val_loss = float(
-                            np.mean(
-                                [
-                                    float(
-                                        x[
-                                            "loss"
-                                        ]
-                                    )
-                                    for x
-                                    in val_outputs
+                        train_outputs.append(
+                            output
+                        )
+
+                        completed_iteration = (
+                            batch_id + 1
+                        )
+
+                        train_losses = [
+                            float(
+                                item[
+                                    "loss"
                                 ]
                             )
+                            for item
+                            in train_outputs
+                        ]
+
+
+                        # =====================================
+                        # CRITICAL RESUME POINT
+                        #
+                        # Write AFTER optimizer step completes.
+                        # =====================================
+
+                        self._save_strict_resume_checkpoint(
+                            phase="train",
+                            train_next_iteration=(
+                                completed_iteration
+                            ),
+                            train_losses=train_losses,
                         )
 
-                        pct = (
-                            100.0
-                            * step
-                            / self.num_val_iterations_per_epoch
+
+                        if (
+                            completed_iteration
+                            % self.progress_every
+                            == 0
+
+                            or completed_iteration
+                            == self.num_iterations_per_epoch
+                        ):
+
+                            elapsed = (
+                                time.perf_counter()
+                                - train_session_start
+                            )
+
+                            this_session_done = max(
+                                1,
+                                completed_iteration
+                                - train_start_iteration,
+                            )
+
+                            sec_per_iteration = (
+                                elapsed
+                                / this_session_done
+                            )
+
+                            remaining = (
+                                self.num_iterations_per_epoch
+                                - completed_iteration
+                            )
+
+                            eta_seconds = (
+                                sec_per_iteration
+                                * remaining
+                            )
+
+                            running_loss = float(
+                                np.mean(
+                                    train_losses
+                                )
+                            )
+
+                            pct = (
+                                100.0
+                                * completed_iteration
+                                / self.num_iterations_per_epoch
+                            )
+
+                            print(
+                                "[TRAIN] "
+                                f"Epoch "
+                                f"{self.current_epoch + 1}/"
+                                f"{self.num_epochs} | "
+                                f"{completed_iteration}/"
+                                f"{self.num_iterations_per_epoch} "
+                                f"({pct:.1f}%) | "
+                                f"loss="
+                                f"{running_loss:.6f} | "
+                                f"ETA="
+                                f"{eta_seconds / 60.0:.1f} min | "
+                                f"resume_saved="
+                                f"{completed_iteration}",
+                                flush=True,
+                            )
+
+
+                    self.on_train_epoch_end(
+                        train_outputs
+                    )
+
+
+                    # Training for this epoch is complete.
+                    # Save full checkpoint once more to mark
+                    # transition into Online Validation.
+                    self._save_strict_resume_checkpoint(
+                        phase="online_val",
+                        train_next_iteration=0,
+                        train_losses=[],
+                    )
+
+                    phase = (
+                        "online_val"
+                    )
+
+
+                # =============================================
+                # ONLINE PATCH VALIDATION
+                # =============================================
+
+                if phase == "online_val":
+
+                    self.on_validation_epoch_start()
+
+                    online_state = (
+                        self._load_online_val_resume_state()
+                    )
+
+                    if online_state is None:
+
+                        val_outputs = []
+
+                        val_start_iteration = 0
+
+                    else:
+
+                        val_outputs = list(
+                            online_state[
+                                "val_outputs"
+                            ]
                         )
 
-                        print(
-                            "[ONLINE-VAL] "
+                        val_start_iteration = int(
+                            online_state[
+                                "next_iteration"
+                            ]
+                        )
+
+                        # Sidecar RNG represents the point
+                        # immediately after the last completed
+                        # Online-Val iteration.
+                        self._restore_rng_state(
+                            online_state[
+                                "rng_state"
+                            ]
+                        )
+
+                        self.print_to_log_file(
+                            "[ONLINE-VAL RESUME] "
                             f"Epoch "
                             f"{self.current_epoch + 1}/"
                             f"{self.num_epochs} | "
-                            f"{step}/"
-                            f"{self.num_val_iterations_per_epoch} "
-                            f"({pct:.1f}%) | "
-                            f"loss="
-                            f"{running_val_loss:.6f} | "
-                            f"ETA={eta / 60.0:.1f} min",
-                            flush=True,
+                            f"completed="
+                            f"{val_start_iteration}/"
+                            f"{self.num_val_iterations_per_epoch} | "
+                            f"next="
+                            f"{val_start_iteration + 1}/"
+                            f"{self.num_val_iterations_per_epoch}"
                         )
 
-                self.on_validation_epoch_end(
-                    val_outputs
-                )
 
-            # =================================================
-            # FORMAL PATIENT FULL-VOLUME VALIDATION
-            # =================================================
+                    val_session_start = (
+                        time.perf_counter()
+                    )
 
+
+                    for batch_id in range(
+                        val_start_iteration,
+                        self.num_val_iterations_per_epoch,
+                    ):
+
+                        with torch.no_grad():
+
+                            output = (
+                                self.validation_step(
+                                    next(
+                                        self.dataloader_val
+                                    )
+                                )
+                            )
+
+                        val_outputs.append(
+                            output
+                        )
+
+                        completed_iteration = (
+                            batch_id + 1
+                        )
+
+
+                        # Small sidecar only.
+                        # Model weights do not change in val.
+                        self._save_online_val_resume_state(
+                            next_iteration=(
+                                completed_iteration
+                            ),
+                            val_outputs=val_outputs,
+                        )
+
+
+                        if (
+                            completed_iteration
+                            % self.progress_every
+                            == 0
+
+                            or completed_iteration
+                            == self.num_val_iterations_per_epoch
+                        ):
+
+                            elapsed = (
+                                time.perf_counter()
+                                - val_session_start
+                            )
+
+                            this_session_done = max(
+                                1,
+                                completed_iteration
+                                - val_start_iteration,
+                            )
+
+                            sec_per_iteration = (
+                                elapsed
+                                / this_session_done
+                            )
+
+                            remaining = (
+                                self.num_val_iterations_per_epoch
+                                - completed_iteration
+                            )
+
+                            eta_seconds = (
+                                sec_per_iteration
+                                * remaining
+                            )
+
+                            running_val_loss = float(
+                                np.mean(
+                                    [
+                                        float(
+                                            item[
+                                                "loss"
+                                            ]
+                                        )
+                                        for item
+                                        in val_outputs
+                                    ]
+                                )
+                            )
+
+                            pct = (
+                                100.0
+                                * completed_iteration
+                                / self.num_val_iterations_per_epoch
+                            )
+
+                            print(
+                                "[ONLINE-VAL] "
+                                f"Epoch "
+                                f"{self.current_epoch + 1}/"
+                                f"{self.num_epochs} | "
+                                f"{completed_iteration}/"
+                                f"{self.num_val_iterations_per_epoch} "
+                                f"({pct:.1f}%) | "
+                                f"loss="
+                                f"{running_val_loss:.6f} | "
+                                f"ETA="
+                                f"{eta_seconds / 60.0:.1f} min | "
+                                f"resume_saved="
+                                f"{completed_iteration}",
+                                flush=True,
+                            )
+
+
+                    self.on_validation_epoch_end(
+                        val_outputs
+                    )
+
+
+                    # logger now contains:
+                    # mean_fg_dice / ema_fg_dice / val_loss.
+                    self._save_strict_resume_checkpoint(
+                        phase="epoch_end",
+                        train_next_iteration=0,
+                        train_losses=[],
+                    )
+
+                    phase = (
+                        "epoch_end"
+                    )
+
+
+                # =============================================
+                # EPOCH END
+                #
+                # NO Full-volume Patient Validation here.
+                # =============================================
+
+                if phase == "epoch_end":
+
+                    completed_epoch_0based = int(
+                        self.current_epoch
+                    )
+
+                    self.on_epoch_end()
+
+                    self._clear_online_val_resume_state(
+                        completed_epoch_0based
+                    )
+
+                    self._resume_phase = (
+                        "epoch_start"
+                    )
+
+                    self._resume_train_next_iteration = 0
+
+                    self._resume_train_losses = []
+
+
+                # =============================================
+                # EARLY STOPPING
+                # =============================================
+
+                if self._should_early_stop():
+
+                    self.print_to_log_file(
+                        "\n"
+                        + "=" * 62
+                    )
+
+                    self.print_to_log_file(
+                        "EARLY STOPPING TRIGGERED"
+                    )
+
+                    self.print_to_log_file(
+                        "monitor="
+                        "ema_fg_dice"
+                    )
+
+                    self.print_to_log_file(
+                        f"min_delta="
+                        f"{self.early_stopping_min_delta}"
+                    )
+
+                    self.print_to_log_file(
+                        f"no_improvement="
+                        f"{self.early_stopping_patience}/"
+                        f"{self.early_stopping_patience}"
+                    )
+
+                    self.print_to_log_file(
+                        "=" * 62
+                        + "\n"
+                    )
+
+                    break
+
+
+        else:
+
+            self.print_to_log_file(
+                "[RESUME] EarlyStopping had already "
+                "completed before this session."
+            )
+
+
+        # =====================================================
+        # TRAINING IS NOW FINISHED
+        # =====================================================
+
+        best_checkpoint = (
+            Path(
+                self.output_folder
+            )
+            / "checkpoint_best.pth"
+        )
+
+        latest_checkpoint = (
+            Path(
+                self.output_folder
+            )
+            / "checkpoint_latest.pth"
+        )
+
+        final_checkpoint = (
+            Path(
+                self.output_folder
+            )
+            / "checkpoint_final.pth"
+        )
+
+
+        if not best_checkpoint.is_file():
+
+            raise RuntimeError(
+                "Training finished but checkpoint_best.pth "
+                "does not exist."
+            )
+
+
+        if not latest_checkpoint.is_file():
+
+            raise RuntimeError(
+                "Training finished but checkpoint_latest.pth "
+                "does not exist. "
+                "Final validation cannot enter resumable mode."
+            )
+
+
+        # =====================================================
+        # Preserve LAST TRAINING STATE as checkpoint_final.
+        #
+        # Do this BEFORE loading checkpoint_best for final
+        # patient validation.
+        # =====================================================
+
+        final_tmp = Path(
+            str(
+                final_checkpoint
+            )
+            + ".tmp"
+        )
+
+        shutil.copy2(
+            latest_checkpoint,
+            final_tmp,
+        )
+
+        os.replace(
+            final_tmp,
+            final_checkpoint,
+        )
+
+
+        # =====================================================
+        # Load BEST checkpoint for final validation.
+        # =====================================================
+
+        raw_best = torch.load(
+            best_checkpoint,
+            map_location="cpu",
+            weights_only=False,
+        )
+
+        selected_best_epoch_1based = int(
+            raw_best[
+                "current_epoch"
+            ]
+        )
+
+        selected_best_ema = (
+            raw_best.get(
+                "_best_ema"
+            )
+        )
+
+        self._final_selected_best_epoch_1based = (
+            selected_best_epoch_1based
+        )
+
+        self._final_selected_best_ema = (
+            None
+            if selected_best_ema is None
+            else float(
+                selected_best_ema
+            )
+        )
+
+
+        self.print_to_log_file(
+            "\n"
+            + "=" * 62
+        )
+
+        self.print_to_log_file(
+            "FINAL 46-PATIENT FULL-VOLUME VALIDATION"
+        )
+
+        self.print_to_log_file(
+            "Checkpoint : checkpoint_best.pth"
+        )
+
+        self.print_to_log_file(
+            f"Best epoch : "
+            f"{selected_best_epoch_1based}"
+        )
+
+        self.print_to_log_file(
+            f"Best EMA   : "
+            f"{self._format_metric(selected_best_ema)}"
+        )
+
+        self.print_to_log_file(
+            "Cases      : "
+            f"{self.expected_validation_cases}"
+        )
+
+        self.print_to_log_file(
+            "Run count  : ONCE after training"
+        )
+
+        self.print_to_log_file(
+            "=" * 62
+            + "\n"
+        )
+
+
+        # Loading best changes only in-memory trainer state.
+        # checkpoint_final already preserves last training state.
+        self.load_checkpoint(
+            str(
+                best_checkpoint
+            )
+        )
+
+
+        # load_checkpoint resets current epoch according to
+        # best checkpoint; restore explicit metadata for output.
+        self._final_selected_best_epoch_1based = (
+            selected_best_epoch_1based
+        )
+
+        self._final_selected_best_ema = (
+            None
+            if selected_best_ema is None
+            else float(
+                selected_best_ema
+            )
+        )
+
+
+        # =====================================================
+        # ONE AND ONLY ONE FULL-VOLUME VALIDATION
+        #
+        # This function itself resumes from the next unfinished
+        # patient if final_validation/resume_state.pth exists.
+        # =====================================================
+
+        (
+            final_metrics,
+            final_patient_rows,
+            final_class_rows,
+        ) = (
             self._run_patient_full_volume_validation()
+        )
 
-            # =================================================
-            # EPOCH END
-            #
-            # checkpoint_best is selected here by
-            # val_patient_mean_dice.
-            # =================================================
 
-            self.on_epoch_end()
+        if (
+            len(
+                final_patient_rows
+            )
+            != self.expected_validation_cases
+        ):
 
-            # =================================================
-            # EARLY STOPPING
-            # =================================================
+            raise RuntimeError(
+                "Final Validation patient count mismatch: "
+                f"expected="
+                f"{self.expected_validation_cases}, "
+                f"actual="
+                f"{len(final_patient_rows)}"
+            )
 
-            if self._should_early_stop():
 
-                self.print_to_log_file(
-                    "\n=============================================="
-                )
+        self._write_final_validation_outputs(
+            metrics=final_metrics,
+            patient_rows=final_patient_rows,
+            class_rows=final_class_rows,
+        )
 
-                self.print_to_log_file(
-                    "EARLY STOPPING TRIGGERED"
-                )
 
-                self.print_to_log_file(
-                    f"monitor="
-                    f"{self.early_stopping_monitor}"
-                )
+        # COMPLETE.json already exists at this point.
+        self._clear_final_patient_resume_state()
 
-                self.print_to_log_file(
-                    f"No sufficient improvement "
-                    f"(min_delta="
-                    f"{self.early_stopping_min_delta}) "
-                    f"for "
-                    f"{self.early_stopping_patience} "
-                    f"epochs."
-                )
 
-                self.print_to_log_file(
-                    "==============================================\n"
-                )
+        # =====================================================
+        # Only AFTER final validation is completely persisted
+        # may latest checkpoint be removed.
+        # =====================================================
 
-                break
+        try:
 
-        self.on_train_end()
+            latest_checkpoint.unlink()
+
+        except FileNotFoundError:
+
+            pass
+
+
+        # SingleThreadedAugmenter has no background worker
+        # processes requiring _finish().
+        self.dataloader_train = None
+        self.dataloader_val = None
+
+        empty_cache(
+            self.device
+        )
+
+
+        self.print_to_log_file(
+            "\n"
+            + "=" * 62
+        )
+
+        self.print_to_log_file(
+            "A-N00 TRAINING + FINAL VALIDATION COMPLETE"
+        )
+
+        self.print_to_log_file(
+            "Final Validation outputs:"
+        )
+
+        self.print_to_log_file(
+            str(
+                self.final_validation_root
+            )
+        )
+
+        self.print_to_log_file(
+            "=" * 62
+            + "\n"
+        )
+

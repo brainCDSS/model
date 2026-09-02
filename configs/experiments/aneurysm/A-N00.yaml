@@ -14,11 +14,7 @@ nnunet:
 training:
   max_epochs: 300
   iterations_per_epoch: 250
-
-  # Patch validation은 학습 상태 확인용 diagnostic.
-  # Best checkpoint / EarlyStopping에는 사용하지 않는다.
   validation_iterations_per_epoch: 50
-
   learning_rate: 0.01
   weight_decay: 0.00003
   oversample_foreground_percent: 0.33
@@ -26,26 +22,31 @@ training:
 validation:
   online_patch:
     iterations_per_epoch: 50
-    role: diagnostic_only
+
+    # 학습 중 checkpoint 선택과 EarlyStopping을 위한
+    # 빠른 proxy validation metric.
+    role: checkpoint_selection_and_early_stopping
+    monitor: ema_fg_dice
 
   patient_full_volume:
     enabled: true
-    every_epoch: true
+
+    # 매 epoch 수행하지 않음.
+    every_epoch: false
+
+    # 모든 학습이 종료된 후 checkpoint_best로 딱 1회.
+    schedule: once_after_training
+    checkpoint: checkpoint_best.pth
     expected_cases: 46
 
-    # Location label 1~52를 환자 단위 foreground로 병합하여
-    # 개별 환자 Dice / Precision / Recall 계산
     foreground_definition: labels_1_to_52_merged
 
-    # GT 없음 + Prediction 없음은 Dice=1로 보상하지 않음
     empty_gt_empty_pred: exclude_from_patient_mean
 
-    # Location Macro metric은 Validation GT에 실제 존재하는
-    # class만 동일 가중치로 평균
     macro_class_scope: gt_present_classes_only
 
-    # 각 환자별 Macro Dice 역시 해당 환자의 GT에
-    # 실제 존재하는 Location class만 동일 가중치로 평균
+    # 각 환자의 GT에 실제 존재하는 Location class만
+    # 동일 가중치로 평균.
     patient_macro_class_scope: gt_present_classes_per_patient_only
 
     metrics:
@@ -62,22 +63,34 @@ validation:
 
 early_stopping:
   enabled: true
-
-  # Best checkpoint와 EarlyStopping의 공식 기준
-  monitor: val_patient_mean_dice
-
+  monitor: ema_fg_dice
   patience: 30
   min_delta: 0.0001
   start_epoch: 0
 
 checkpoint:
-  best_monitor: val_patient_mean_dice
+  best_monitor: ema_fg_dice
+
+  # epoch complete checkpoint도 매 epoch 저장.
   save_every: 1
+
   resume: true
 
-progress:
-  # Train / Online Patch Validation
-  every_iterations: 25
+resume:
+  mode: strict_last_completed_unit
 
-  # 46명 Full-volume Validation
+  # Train optimizer step 완료 후 매 iteration 영구 저장.
+  train_checkpoint_every_iterations: 1
+
+  # Online Validation은 완료 iteration 다음부터.
+  online_validation_progress_every_iterations: 1
+
+  # Final 46명 Validation은 완료 환자 다음부터.
+  final_patient_validation_progress_every_patient: 1
+
+  # Dataloader/RNG 복구 일관성 확보.
+  data_augmentation_workers: 0
+
+progress:
+  every_iterations: 25
   every_validation_patient: 1
