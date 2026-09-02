@@ -65,3 +65,30 @@ GitHub에는 데이터 준비·QA 노트북과 모델 구조·학습 노트북�
 
 인증 URL, 인증 코드, SSH key, token, 실제 NIfTI, checkpoint 및
 대용량 학습 로그는 Git에 저장하지 않는다.
+
+## A-S00 attempt-02 — foreground-collapse correction
+
+첫 번째 실행은 train/validation DiceCE가 약 1.0으로 수렴하고
+online foreground Dice가 31 epoch 동안 0.0을 유지하여
+background collapse로 판정하였다.
+
+모델 구조와 확정 계약은 유지한다.
+
+- Standard MONAI SegResNet
+- Location 53 classes
+- Train/Validation/Test: 215/46/46
+- Split seed: 20260828
+- Type mask: 사용하지 않음
+- Patch: 112 x 160 x 64
+- Physical batch: 1
+- Train/online validation: 250/50 iterations
+- Max epoch: 300
+- Monitor: ema_fg_dice
+- Patience/min_delta: 30/0.0001
+- Strict unit resume 유지
+- Full-volume validation은 best checkpoint로 마지막에 46명 1회
+
+교정 범위는 양성 환자에서 foreground crop을 항상 선택하도록
+conditional foreground fraction을 1.0으로 변경하고, DiceCE의
+CE weight를 0.25로 낮추는 것이다. 첫 번째 결과는 보존하며
+attempt-02에서 별도로 실행한다.
