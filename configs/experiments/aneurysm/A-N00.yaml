@@ -44,9 +44,15 @@ validation:
     # class만 동일 가중치로 평균
     macro_class_scope: gt_present_classes_only
 
+    # 각 환자별 Macro Dice 역시 해당 환자의 GT에
+    # 실제 존재하는 Location class만 동일 가중치로 평균
+    patient_macro_class_scope: gt_present_classes_per_patient_only
+
     metrics:
       - patient_mean_dice
       - patient_median_dice
+      - patient_macro_dice
+      - patient_mean_macro_dice
       - patient_mean_precision
       - patient_mean_recall
       - macro_dice

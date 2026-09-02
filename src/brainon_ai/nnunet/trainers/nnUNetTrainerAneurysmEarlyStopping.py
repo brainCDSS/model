@@ -1307,6 +1307,16 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                             ]
                         )
 
+                    # -------------------------------------------------
+                    # Per-patient Location Macro Dice
+                    #
+                    # 한 환자 GT에 실제 존재하는 Location class만
+                    # 동일 가중치로 평균한다.
+                    # -------------------------------------------------
+
+                    patient_macro_dices = []
+                    patient_macro_gt_present_classes = 0
+
                     for label in foreground_labels:
 
                         gt_mask = (
@@ -1352,6 +1362,37 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                             )
                         )
 
+                        # ---------------------------------------------
+                        # Patient Macro Dice contribution
+                        #
+                        # 이 환자의 GT에 존재하는 class만 포함.
+                        # GT class가 존재하지만 prediction이 없으면
+                        # 해당 class Dice는 0.
+                        # ---------------------------------------------
+
+                        if gt_voxels > 0:
+
+                            patient_macro_gt_present_classes += 1
+
+                            patient_class_dice_denominator = (
+                                2 * tp
+                                + fp
+                                + fn
+                            )
+
+                            patient_class_dice = (
+                                float(
+                                    2 * tp
+                                    / patient_class_dice_denominator
+                                )
+                                if patient_class_dice_denominator > 0
+                                else 0.0
+                            )
+
+                            patient_macro_dices.append(
+                                patient_class_dice
+                            )
+
                         class_counts[
                             label
                         ][
@@ -1382,6 +1423,12 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                             "pred_voxels"
                         ] += pred_voxels
 
+                    patient_macro_dice = (
+                        self._finite_mean(
+                            patient_macro_dices
+                        )
+                    )
+
                     patient_row = {
                         "epoch_0based":
                             self.current_epoch,
@@ -1392,7 +1439,15 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                         "case_id":
                             case_id,
 
+                        # Foreground-merged patient metric
                         **patient_metric,
+
+                        # Location class-wise patient Macro Dice
+                        "patient_macro_dice":
+                            patient_macro_dice,
+
+                        "patient_macro_gt_present_classes":
+                            patient_macro_gt_present_classes,
                     }
 
                     patient_rows.append(
@@ -1457,6 +1512,8 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                             f"case={case_id} | "
                             f"dice="
                             f"{self._format_metric(patient_metric['dice'])} | "
+                            f"patient_macro="
+                            f"{self._format_metric(patient_macro_dice)} | "
                             f"running_mean="
                             f"{self._format_metric(running_mean_dice)} | "
                             f"ETA={eta_seconds / 60.0:.1f} min",
@@ -1507,6 +1564,18 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             self._finite_median(
                 [
                     row["dice"]
+                    for row
+                    in patient_rows
+                ]
+            )
+        )
+
+        # 46명 각각의 Patient Macro Dice를 다시 평균한
+        # Validation Patient Mean Macro Dice
+        patient_mean_macro_dice = (
+            self._finite_mean(
+                [
+                    row["patient_macro_dice"]
                     for row
                     in patient_rows
                 ]
@@ -1729,6 +1798,9 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             "val_patient_median_dice":
                 patient_median_dice,
 
+            "val_patient_mean_macro_dice":
+                patient_mean_macro_dice,
+
             "val_patient_mean_precision":
                 patient_mean_precision,
 
@@ -1783,7 +1855,9 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             f"{self._format_metric(patient_mean_dice)} | "
             f"PatientMedianDice="
             f"{self._format_metric(patient_median_dice)} | "
-            f"MacroDice="
+            f"PatientMeanMacroDice="
+            f"{self._format_metric(patient_mean_macro_dice)} | "
+            f"SplitMacroDice="
             f"{self._format_metric(macro_dice)} | "
             f"Precision="
             f"{self._format_metric(patient_mean_precision)} | "
@@ -2014,6 +2088,11 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             "val_patient_median_dice":
                 self._latest_patient_metrics[
                     "val_patient_median_dice"
+                ],
+
+            "val_patient_mean_macro_dice":
+                self._latest_patient_metrics[
+                    "val_patient_mean_macro_dice"
                 ],
 
             "val_patient_mean_precision":
