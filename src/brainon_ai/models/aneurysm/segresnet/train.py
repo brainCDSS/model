@@ -25,6 +25,7 @@ from brainon_ai.models.aneurysm.segresnet.config import (
 from brainon_ai.models.aneurysm.segresnet.data import (
     build_patch_datasets,
     deterministic_batch,
+    deterministic_foreground_unit,
     deterministic_indices,
     load_manifest,
 )
@@ -566,10 +567,25 @@ def train(config: dict) -> Path:
             )
 
             while completed < train_iterations:
-                indices = deterministic_indices(
-                    case_count=len(
-                        datasets["train"]
+                force_foreground = deterministic_foreground_unit(
+                    iteration=completed,
+                    total_iterations=train_iterations,
+                    fraction=float(
+                        config["data"][
+                            "foreground_oversample_fraction"
+                        ]
                     ),
+                )
+
+                dataset_key = (
+                    "train_foreground"
+                    if force_foreground
+                    else "train_background"
+                )
+                selected_dataset = datasets[dataset_key]
+
+                indices = deterministic_indices(
+                    case_count=len(selected_dataset),
                     batch_size=batch_size,
                     seed=seed,
                     epoch=epoch,
@@ -578,7 +594,7 @@ def train(config: dict) -> Path:
                 )
 
                 batch = deterministic_batch(
-                    datasets["train"],
+                    selected_dataset,
                     indices=indices,
                     transform_seed=(
                         seed
@@ -708,12 +724,25 @@ def train(config: dict) -> Path:
             model.eval()
 
             while completed < validation_iterations:
-                # 동일한 고정 online-validation patch
-                # 집합으로 epoch 간 비교합니다.
-                indices = deterministic_indices(
-                    case_count=len(
-                        datasets["validation"]
+                force_foreground = deterministic_foreground_unit(
+                    iteration=completed,
+                    total_iterations=validation_iterations,
+                    fraction=float(
+                        config["validation"][
+                            "online_patch"
+                        ]["foreground_fraction"]
                     ),
+                )
+
+                dataset_key = (
+                    "validation_foreground"
+                    if force_foreground
+                    else "validation_background"
+                )
+                selected_dataset = datasets[dataset_key]
+
+                indices = deterministic_indices(
+                    case_count=len(selected_dataset),
                     batch_size=batch_size,
                     seed=seed,
                     epoch=0,
@@ -722,7 +751,7 @@ def train(config: dict) -> Path:
                 )
 
                 batch = deterministic_batch(
-                    datasets["validation"],
+                    selected_dataset,
                     indices=indices,
                     transform_seed=(
                         seed

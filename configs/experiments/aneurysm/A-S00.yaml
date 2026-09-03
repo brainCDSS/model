@@ -7,7 +7,7 @@ data_release: topaneu2026_mra_v1.0.0
 experiment:
   seed: 20260828
   device: cuda
-  output_dir: ${BRAINON_RUN_ROOT:-../runs}/aneurysm/A-S00/attempt-02
+  output_dir: ${BRAINON_RUN_ROOT:-../runs}/aneurysm/A-S00/attempt-04
 
 data:
   root_dir: ${BRAINON_DATA_ROOT:-../data}/SegResNet_TopAneu_MRA
@@ -42,7 +42,8 @@ data:
   # Smoke 통과 전에는 commit하지 않는다.
   batch_size: 1
 
-  foreground_oversample_fraction: 1.0
+  foreground_oversample_fraction: 0.5
+  sampling_strategy: deterministic_global_foreground
   num_workers: 0
   normalization: nonzero_zscore
 
@@ -57,11 +58,12 @@ model:
   dropout_prob: 0.0
 
 loss:
-  name: dice_ce
+  name: presence_aware_dice_ce
   include_background: false
   batch_dice: true
   dice_weight: 1.0
-  ce_weight: 0.25
+  ce_weight: 0.5
+  background_ce_weight: 0.001
 
 optimizer:
   name: adamw
@@ -86,6 +88,7 @@ validation:
     role: checkpoint_selection_and_early_stopping
     monitor: ema_fg_dice
     ema_alpha: 0.9
+    foreground_fraction: 0.5
 
   patient_full_volume:
     every_epoch: false
@@ -96,7 +99,7 @@ validation:
 early_stopping:
   enabled: true
   monitor: ema_fg_dice
-  patience: 30
+  patience: 80
   min_delta: 0.0001
   start_epoch: 0
 

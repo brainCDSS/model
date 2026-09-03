@@ -198,14 +198,51 @@ def _validate_config(config: dict[str, Any]) -> None:
             "init_filters divisible by 8"
         )
 
-    if str(config["loss"]["name"]).lower() != "dice_ce":
+    if (
+        str(config["loss"]["name"]).lower()
+        != "presence_aware_dice_ce"
+    ):
         raise ValueError(
-            "A-S00 baseline loss must be dice_ce"
+            "A-S00 requires presence_aware_dice_ce"
         )
 
     if bool(config["loss"]["include_background"]):
         raise ValueError(
             "A-S00 Dice must exclude background"
+        )
+
+    if float(data["foreground_oversample_fraction"]) != 0.5:
+        raise ValueError(
+            "A-S00 global foreground fraction must remain 0.5"
+        )
+
+    if (
+        data["sampling_strategy"]
+        != "deterministic_global_foreground"
+    ):
+        raise ValueError(
+            "A-S00 sampling strategy must remain "
+            "deterministic_global_foreground"
+        )
+
+    if float(online["foreground_fraction"]) != 0.5:
+        raise ValueError(
+            "A-S00 validation foreground fraction must remain 0.5"
+        )
+
+    if float(config["loss"]["background_ce_weight"]) != 0.001:
+        raise ValueError(
+            "A-S00 background CE weight must remain 0.001"
+        )
+
+    if float(config["loss"]["dice_weight"]) != 1.0:
+        raise ValueError(
+            "A-S00 Dice weight must remain 1.0"
+        )
+
+    if float(config["loss"]["ce_weight"]) != 0.5:
+        raise ValueError(
+            "A-S00 CE weight must remain 0.5"
         )
 
     blocks_down = tuple(
@@ -306,9 +343,9 @@ def _validate_config(config: dict[str, Any]) -> None:
             "Early stopping monitor must be ema_fg_dice"
         )
 
-    if int(early_stopping["patience"]) != 30:
+    if int(early_stopping["patience"]) != 80:
         raise ValueError(
-            "Early stopping patience must remain 30"
+            "Early stopping patience must remain 80"
         )
 
     if float(early_stopping["min_delta"]) != 0.0001:

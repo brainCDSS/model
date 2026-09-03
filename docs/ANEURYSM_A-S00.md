@@ -92,3 +92,32 @@ background collapse로 판정하였다.
 conditional foreground fraction을 1.0으로 변경하고, DiceCE의
 CE weight를 0.25로 낮추는 것이다. 첫 번째 결과는 보존하며
 attempt-02에서 별도로 실행한다.
+
+## A-S00 attempt-04 — collapse-safe training
+
+attempt-01과 attempt-02에서 foreground Dice가 31 epoch 동안
+0.0으로 유지되어 background collapse로 판정하였다.
+
+유지 사항:
+
+- Standard MONAI SegResNet
+- Location 53 classes
+- 고정 split 215/46/46, seed 20260828
+- Type mask 사용 금지
+- Patch 112 x 160 x 64, physical batch 1
+- Train/online validation 250/50 unit
+- Max epoch 300
+- monitor ema_fg_dice, min_delta 0.0001
+- strict unit resume
+- 마지막 checkpoint_best 기준 validation 46명 1회
+
+교정 사항:
+
+- train 250개 중 125개 forced-foreground unit
+- validation 50개 중 25개 forced-foreground unit
+- GT-present foreground class만 Dice 계산
+- CE background target weight 0.001
+- Dice/CE 비중 1.0/0.5
+- Early Stopping patience 80
+- 실제 양성 patch one-patch overfit 통과 후 본학습
+- attempt-04에 결과 별도 보존

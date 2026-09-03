@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import warnings
+
+import nibabel as nib
 from pathlib import Path
 
 import numpy as np
@@ -514,10 +516,17 @@ def build_patch_transform(
     config: dict,
     *,
     training: bool,
+    foreground_fraction: float | None = None,
 ) -> Compose:
     data = config["data"]
-    transforms = _base_transform(config)
 
+    fraction = (
+        float(data["foreground_oversample_fraction"])
+        if foreground_fraction is None
+        else float(foreground_fraction)
+    )
+
+    transforms = _base_transform(config)
     transforms.extend(
         [
             SpatialPadd(
@@ -526,11 +535,7 @@ def build_patch_transform(
             ),
             ConditionalPatchSampler(
                 data["patch_size"],
-                foreground_fraction=float(
-                    data[
-                        "foreground_oversample_fraction"
-                    ]
-                ),
+                foreground_fraction=fraction,
             ),
         ]
     )
@@ -588,7 +593,6 @@ def build_patch_transform(
 
     return Compose(transforms)
 
-
 def build_full_volume_transform(
     config: dict,
 ) -> Compose:
@@ -609,33 +613,119 @@ def build_full_volume_transform(
     )
 
 
+def _records_with_foreground(
+    records: list[dict],
+) -> list[dict]:
+    positive_records = []
+
+    for record in records:
+        label_image = nib.load(record["label"])
+        label_array = np.asanyarray(
+            label_image.dataobj
+        )
+
+        if np.any(label_array > 0):
+            positive_records.append(record)
+
+    if not positive_records:
+        raise RuntimeError(
+            "Split contains no foreground-positive cases"
+        )
+
+    return positive_records
+
+
 def build_patch_datasets(
     config: dict,
     manifest: pd.DataFrame,
 ) -> dict[str, Dataset]:
+    train_records = records_for_split(
+        manifest,
+        "train",
+    )
+    validation_records = records_for_split(
+        manifest,
+        "validation",
+    )
+
+    train_positive = _records_with_foreground(
+        train_records
+    )
+    validation_positive = _records_with_foreground(
+        validation_records
+    )
+
     return {
-        "train": Dataset(
-            records_for_split(
-                manifest,
-                "train",
-            ),
+        "train_foreground": Dataset(
+            train_positive,
             transform=build_patch_transform(
                 config,
                 training=True,
+                foreground_fraction=1.0,
             ),
         ),
-        "validation": Dataset(
-            records_for_split(
-                manifest,
-                "validation",
+        "train_background": Dataset(
+            train_records,
+            transform=build_patch_transform(
+                config,
+                training=True,
+                foreground_fraction=0.0,
             ),
+        ),
+        "validation_foreground": Dataset(
+            validation_positive,
             transform=build_patch_transform(
                 config,
                 training=False,
+                foreground_fraction=1.0,
+            ),
+        ),
+        "validation_background": Dataset(
+            validation_records,
+            transform=build_patch_transform(
+                config,
+                training=False,
+                foreground_fraction=0.0,
             ),
         ),
     }
 
+
+def deterministic_foreground_unit(
+    *,
+    iteration: int,
+    total_iterations: int,
+    fraction: float,
+) -> bool:
+    """Return an exact, interleaved forced-foreground schedule."""
+    if total_iterations <= 0:
+        raise ValueError(
+            "total_iterations must be positive"
+        )
+
+    if not 0.0 <= fraction <= 1.0:
+        raise ValueError(
+            "fraction must be in [0, 1]"
+        )
+
+    if not 0 <= iteration < total_iterations:
+        raise ValueError(
+            "iteration is out of range"
+        )
+
+    foreground_count = int(
+        round(total_iterations * fraction)
+    )
+
+    count_before = (
+        iteration * foreground_count
+    ) // total_iterations
+
+    count_after = (
+        (iteration + 1) * foreground_count
+    ) // total_iterations
+
+    return count_after > count_before
 
 def deterministic_indices(
     *,
