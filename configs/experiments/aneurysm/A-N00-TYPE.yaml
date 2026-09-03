@@ -1,0 +1,96 @@
+experiment_id: A-N00-TYPE
+task: aneurysm
+target: type
+
+model:
+  name: nnunet
+  variant: standard
+
+nnunet:
+  configuration: 3d_fullres
+  fold: 0
+  trainer: nnUNetTrainerAneurysmTypeBaseline
+
+training:
+  max_epochs: 300
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  learning_rate: 0.01
+  weight_decay: 0.00003
+  oversample_foreground_percent: 0.33
+
+validation:
+  online_patch:
+    iterations_per_epoch: 50
+
+    # 학습 중 checkpoint 선택과 EarlyStopping을 위한
+    # 빠른 proxy validation metric.
+    role: checkpoint_selection_and_early_stopping
+    monitor: ema_fg_dice
+
+  patient_full_volume:
+    enabled: true
+
+    # 매 epoch 수행하지 않음.
+    every_epoch: false
+
+    # 모든 학습이 종료된 후 checkpoint_best로 딱 1회.
+    schedule: once_after_training
+    checkpoint: checkpoint_best.pth
+    expected_cases: 46
+
+    foreground_definition: labels_1_to_3_merged
+
+    empty_gt_empty_pred: exclude_from_patient_mean
+
+    macro_class_scope: gt_present_classes_only
+
+    # 각 환자의 GT에 실제 존재하는 Type class만
+    # 동일 가중치로 평균.
+    patient_macro_class_scope: gt_present_classes_per_patient_only
+
+    metrics:
+      - patient_mean_dice
+      - patient_median_dice
+      - patient_macro_dice
+      - patient_mean_macro_dice
+      - patient_mean_precision
+      - patient_mean_recall
+      - macro_dice
+      - macro_precision
+      - macro_recall
+      - negative_case_fp_rate
+
+early_stopping:
+  enabled: true
+  monitor: ema_fg_dice
+  patience: 30
+  min_delta: 0.0001
+  start_epoch: 0
+
+checkpoint:
+  best_monitor: ema_fg_dice
+
+  # epoch complete checkpoint도 매 epoch 저장.
+  save_every: 1
+
+  resume: true
+
+resume:
+  mode: strict_last_completed_unit
+
+  # Train optimizer step 완료 후 매 iteration 영구 저장.
+  train_checkpoint_every_iterations: 1
+
+  # Online Validation은 완료 iteration 다음부터.
+  online_validation_progress_every_iterations: 1
+
+  # Final 46명 Validation은 완료 환자 다음부터.
+  final_patient_validation_progress_every_patient: 1
+
+  # Dataloader/RNG 복구 일관성 확보.
+  data_augmentation_workers: 0
+
+progress:
+  every_iterations: 25
+  every_validation_patient: 1
