@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import json
 import math
 import os
+import shutil
 from copy import deepcopy
 from datetime import datetime, timezone
+from multiprocessing.pool import ThreadPool
 from pathlib import Path
 from time import monotonic
 
@@ -69,7 +72,9 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
             patience=int(pruning["patience"]),
             min_delta=float(pruning["min_delta"]),
         )
+        self._last_dice = float("nan")
         self._last_recall = float("nan")
+        self._last_composite = float("nan")
         self._stop_requested = False
         self._best_dice = float("-inf")
         self._best_recall = float("-inf")
@@ -79,6 +84,18 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         self._config_marker_path = Path(self.output_folder) / "ich_config.json"
         self._session_started = monotonic()
         self._epoch_durations: list[float] = []
+        full_validation = self.ich_config.get("full_validation", {})
+        self._full_validation_enabled = bool(full_validation.get("enabled", False))
+        self._full_validation_interval = int(full_validation.get("interval", 5))
+        self._archive_every_epoch = bool(full_validation.get("archive_every_epoch", False))
+        self._full_validation_top_k = int(full_validation.get("keep_top_k", 3))
+        self._full_validation_neighborhood_radius = int(
+            full_validation.get("neighborhood_radius", 4)
+        )
+        self._best_full_macro_dice = float("-inf")
+        self._best_full_macro_epoch = None
+        self._last_full_macro_dice = float("nan")
+        self._full_validation_history_path = Path(self.output_folder) / "full_validation_history.json"
 
     @staticmethod
     def _finite_or_none(value: float):
@@ -100,6 +117,12 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         composite: float = float("nan"),
         message: str | None = None,
     ) -> None:
+        if not math.isfinite(dice):
+            dice = self._last_dice
+        if not math.isfinite(recall):
+            recall = self._last_recall
+        if not math.isfinite(composite):
+            composite = self._last_composite
         mean_epoch_seconds = (
             sum(self._epoch_durations) / len(self._epoch_durations)
             if self._epoch_durations
@@ -120,17 +143,32 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
                 if mean_epoch_seconds
                 else None
             ),
+            "train_loss": (
+                float(self.logger.get_value("train_losses", step=-1))
+                if completed_epochs > 0
+                else None
+            ),
             "pseudo_dice": self._finite_or_none(dice),
             "pseudo_recall": self._finite_or_none(recall),
             "composite": self._finite_or_none(composite),
             "best_dice": self._finite_or_none(self._best_dice),
             "best_recall": self._finite_or_none(self._best_recall),
             "best_composite": self._finite_or_none(self._best_composite),
+            "full_macro_dice": self._finite_or_none(self._last_full_macro_dice),
+            "best_full_macro_dice": self._finite_or_none(self._best_full_macro_dice),
+            "best_full_macro_epoch": self._best_full_macro_epoch,
+            "top_full_macro_epochs": self._top_full_macro_epochs(),
+            "retained_epoch_checkpoints": self._retained_checkpoint_count(),
             "pruning_bad_checks": self.early_stopping.bad_checks,
             "pruning_patience": self.early_stopping.patience,
             "output_folder": str(self.output_folder),
             "batch_size": self.configuration_manager.batch_size,
             "patch_size": list(self.configuration_manager.patch_size),
+            "gpu_max_memory_gb": (
+                round(torch.cuda.max_memory_allocated(self.device) / (1024 ** 3), 3)
+                if self.device.type == "cuda"
+                else None
+            ),
         }
         self._write_json_atomic(self._progress_path, payload)
 
@@ -143,6 +181,26 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
                     "plans.output_identifier를 새 이름으로 바꾸세요."
                 )
         super().on_train_start()
+        history = self._load_full_validation_history()
+        validated_epochs = {int(item["epoch"]) for item in history}
+        if (
+            self._full_validation_enabled
+            and self.current_epoch > 0
+            and self.current_epoch % self._full_validation_interval == 0
+            and self.current_epoch not in validated_epochs
+        ):
+            checkpoint = (
+                Path(self.output_folder)
+                / "epoch_checkpoints"
+                / f"checkpoint_epoch_{self.current_epoch:04d}.pth"
+            )
+            self.print_to_log_file(
+                f"Resuming missing full-volume validation at epoch {self.current_epoch}"
+            )
+            self._maybe_run_full_validation(
+                self.current_epoch,
+                checkpoint if checkpoint.is_file() else None,
+            )
         self._write_progress("running", self.current_epoch)
         if self.local_rank == 0:
             payload = {
@@ -176,6 +234,8 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
                 "best_dice": float(self._best_dice),
                 "best_recall": float(self._best_recall),
                 "best_composite": float(self._best_composite),
+                "best_full_macro_dice": float(self._best_full_macro_dice),
+                "best_full_macro_epoch": self._best_full_macro_epoch,
                 "pruning": self.early_stopping.state_dict(),
             },
         }
@@ -202,6 +262,8 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         self._best_dice = float(state.get("best_dice", self._best_dice))
         self._best_recall = float(state.get("best_recall", self._best_recall))
         self._best_composite = float(state.get("best_composite", self._best_composite))
+        self._best_full_macro_dice = float(state.get("best_full_macro_dice", self._best_full_macro_dice))
+        self._best_full_macro_epoch = state.get("best_full_macro_epoch", self._best_full_macro_epoch)
         self.early_stopping.load_state_dict(state.get("pruning"))
 
     @staticmethod
@@ -247,24 +309,21 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         sampling_config = self.ich_config["sampling"]
         strategy = str(sampling_config.get("strategy", "case_weighted")).lower()
         loader_class, loader_extra, probabilities = nnUNetDataLoader, {}, None
-        if strategy == "component_center":
-            centers, report = build_component_centers(
+        if strategy in {"component_center", "case_and_component"}:
+            centers, component_report = build_component_centers(
                 dataset_tr, self.configuration_manager.spacing, sampling_config)
             loader_class = ComponentCenteredDataLoader
             loader_extra["component_centers"] = centers
-        if self.local_rank == 0:
-            write_component_report(
-                Path(self.output_folder) / "component_sampling.json",
-                report,
-            )
-            self.print_to_log_file(
-                f"Component-centered sampling: {report['num_components']} components"
-            )
-        else:
-            probabilities, report = build_sampling_probabilities(
+            if self.local_rank == 0:
+                write_component_report(
+                    Path(self.output_folder) / "component_sampling.json", component_report)
+                self.print_to_log_file("Component-centered sampling enabled")
+        if strategy in {"case_weighted", "case_and_component"}:
+            probabilities, case_report = build_sampling_probabilities(
                 dataset_tr, self.configuration_manager.spacing, sampling_config)
             if self.local_rank == 0:
-                write_sampling_report(Path(self.output_folder) / "small_lesion_sampling.json", report)
+                write_sampling_report(
+                    Path(self.output_folder) / "small_lesion_sampling.json", case_report)
                 self.print_to_log_file("Small-lesion case sampling enabled")
         dl_tr = loader_class(
             dataset_tr, self.batch_size, initial_patch_size, patch_size, self.label_manager,
@@ -335,12 +394,163 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         finite_recalls = recalls[np.isfinite(recalls)]
         self._last_recall = float(finite_recalls.mean()) if finite_recalls.size else float("nan")
 
+    def _load_full_validation_history(self) -> list[dict]:
+        if not self._full_validation_history_path.is_file():
+            return []
+        history = json.loads(self._full_validation_history_path.read_text(encoding="utf-8"))
+        if history:
+            best = max(history, key=lambda item: float(item["macro_dice_positive"]))
+            self._best_full_macro_dice = float(best["macro_dice_positive"])
+            self._best_full_macro_epoch = int(best["epoch"])
+            self._last_full_macro_dice = float(history[-1]["macro_dice_positive"])
+        return history
+
+    def _top_full_macro_epochs(self, history: list[dict] | None = None) -> list[int]:
+        if history is None:
+            history = self._load_full_validation_history()
+        ranked = sorted(
+            history,
+            key=lambda item: float(item["macro_dice_positive"]),
+            reverse=True,
+        )
+        return [int(item["epoch"]) for item in ranked[: self._full_validation_top_k]]
+
+    def _retained_checkpoint_count(self) -> int:
+        folder = Path(self.output_folder) / "epoch_checkpoints"
+        return len(list(folder.glob("checkpoint_epoch_*.pth"))) if folder.is_dir() else 0
+
+    def _prune_epoch_checkpoints(self, history: list[dict], completed_epochs: int) -> None:
+        """Keep Top-K validation neighborhoods and the rolling unevaluated interval."""
+        if not self._archive_every_epoch or self.local_rank != 0:
+            return
+        folder = Path(self.output_folder) / "epoch_checkpoints"
+        if not folder.is_dir():
+            return
+        radius = self._full_validation_neighborhood_radius
+        keep_epochs: set[int] = set()
+        for anchor in self._top_full_macro_epochs(history):
+            keep_epochs.update(range(max(1, anchor - radius), anchor + radius + 1))
+        # Preserve the recent rolling window required by the next sampled epoch.
+        keep_epochs.update(range(max(1, completed_epochs - radius + 1), completed_epochs + 1))
+        for checkpoint in folder.glob("checkpoint_epoch_*.pth"):
+            try:
+                epoch = int(checkpoint.stem.rsplit("_", 1)[1])
+            except (IndexError, ValueError):
+                continue
+            if epoch not in keep_epochs:
+                checkpoint.unlink()
+
+    def _archive_epoch_checkpoint(self, completed_epochs: int) -> Path | None:
+        if not self._archive_every_epoch or self.local_rank != 0:
+            return None
+        folder = Path(self.output_folder) / "epoch_checkpoints"
+        folder.mkdir(parents=True, exist_ok=True)
+        destination = folder / f"checkpoint_epoch_{completed_epochs:04d}.pth"
+        if destination.is_file():
+            return destination
+        self.current_epoch -= 1
+        try:
+            self.save_checkpoint(str(destination))
+        finally:
+            self.current_epoch += 1
+        return destination
+
+    @staticmethod
+    def _positive_macro_from_summary(summary: dict) -> tuple[float, int]:
+        values = []
+        for item in summary.get("metric_per_case", []):
+            metrics = item["metrics"]["1"]
+            if float(metrics.get("n_ref", 0)) > 0:
+                value = float(metrics["Dice"])
+                if math.isfinite(value):
+                    values.append(value)
+        if not values:
+            raise RuntimeError("full-volume validation has no positive cases")
+        return float(np.mean(values)), len(values)
+
+    def perform_actual_validation(self, save_probabilities: bool = False):
+        """Run nnU-Net export in one thread to avoid tiny /dev/shm failures."""
+        trainer_module = importlib.import_module(
+            "nnunetv2.training.nnUNetTrainer.nnUNetTrainer"
+        )
+        original_multiprocessing = trainer_module.multiprocessing
+
+        class _ThreadPoolContext:
+            @staticmethod
+            def Pool(processes=None):
+                return ThreadPool(processes=1)
+
+        class _ThreadedMultiprocessing:
+            @staticmethod
+            def get_context(method=None):
+                return _ThreadPoolContext()
+
+        trainer_module.multiprocessing = _ThreadedMultiprocessing
+        try:
+            return super().perform_actual_validation(save_probabilities)
+        finally:
+            trainer_module.multiprocessing = original_multiprocessing
+
+    def _maybe_run_full_validation(self, completed_epochs: int, epoch_checkpoint: Path | None) -> None:
+        if not self._full_validation_enabled:
+            return
+        if completed_epochs % self._full_validation_interval != 0:
+            return
+        if self.is_ddp:
+            raise RuntimeError("periodic full-volume validation currently supports single-GPU training only")
+        destination = Path(self.output_folder) / "full_validation" / f"epoch_{completed_epochs:04d}"
+        summary_path = destination / "summary.json"
+        if not summary_path.is_file():
+            transient = Path(self.output_folder) / "validation"
+            if transient.exists():
+                shutil.rmtree(transient)
+            self.print_to_log_file(f"Starting full-volume validation at epoch {completed_epochs}")
+            self.perform_actual_validation(False)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            if destination.exists():
+                shutil.rmtree(destination)
+            shutil.move(str(transient), str(destination))
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        macro_dice, positive_cases = self._positive_macro_from_summary(summary)
+        self._last_full_macro_dice = macro_dice
+        history = self._load_full_validation_history()
+        history = [item for item in history if int(item["epoch"]) != completed_epochs]
+        record = {
+            "epoch": completed_epochs,
+            "macro_dice_positive": macro_dice,
+            "positive_cases": positive_cases,
+            "summary": str(summary_path),
+            "checkpoint": str(epoch_checkpoint) if epoch_checkpoint else None,
+        }
+        history.append(record)
+        history.sort(key=lambda item: int(item["epoch"]))
+        self._write_json_atomic(self._full_validation_history_path, history)
+        if macro_dice > self._best_full_macro_dice:
+            self._best_full_macro_dice = macro_dice
+            self._best_full_macro_epoch = completed_epochs
+            best_path = Path(self.output_folder) / "checkpoint_best_full_macro.pth"
+            if epoch_checkpoint is not None:
+                shutil.copy2(epoch_checkpoint, best_path)
+            else:
+                self.current_epoch -= 1
+                try:
+                    self.save_checkpoint(str(best_path))
+                finally:
+                    self.current_epoch += 1
+        self._prune_epoch_checkpoints(history, completed_epochs)
+        self.network.train()
+        self.print_to_log_file(
+            f"Full-volume epoch {completed_epochs}: positive macro Dice={macro_dice:.6f}")
+
     def _save_metric_state(self, dice: float, recall: float, composite: float, epoch: int) -> None:
         if self.local_rank != 0:
             return
 
         payload = {
             "epoch": epoch,
+            "train_loss": float(
+                self.logger.get_value("train_losses", step=-1)
+            ),
             "pseudo_dice": self._finite_or_none(dice),
             "pseudo_recall": self._finite_or_none(recall),
             "composite": self._finite_or_none(composite),
@@ -363,6 +573,8 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
             if math.isfinite(dice) and math.isfinite(recall)
             else float("nan")
         )
+        self._last_dice = dice
+        self._last_composite = composite
         min_delta = float(weights.get("min_delta", 0.0))
         improved_dice = math.isfinite(dice) and dice > self._best_dice + min_delta
         improved_recall = math.isfinite(recall) and recall > self._best_recall + min_delta
@@ -400,6 +612,8 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
                     self.save_checkpoint(str(Path(self.output_folder) / "checkpoint_best_composite.pth"))
             finally:
                 self.current_epoch += 1
+        epoch_checkpoint = self._archive_epoch_checkpoint(completed_epochs)
+        self._maybe_run_full_validation(completed_epochs, epoch_checkpoint)
         self._save_metric_state(dice, recall, composite, epoch)
         self._write_progress(
             "early_stopping" if self._stop_requested else "running",

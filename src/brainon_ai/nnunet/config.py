@@ -60,18 +60,24 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         if thresholds != sorted(thresholds) or thresholds[0] <= 0:
             raise ValueError("sampling volume thresholds must be positive and sorted")
         strategy = str(sampling.get("strategy", "case_weighted")).lower()
+        component_required = {"lt_1ml", "1_to_5ml", "5_to_20ml", "ge_20ml"}
+        case_required = {"negative", *component_required}
         if strategy == "component_center":
-            required = {"lt_1ml", "1_to_5ml", "5_to_20ml", "ge_20ml"}
-            weights = sampling.get("component_weights", {})
+            groups = [(component_required, sampling.get("component_weights", {}))]
         elif strategy == "case_weighted":
-            required = {"negative", "lt_1ml", "1_to_5ml", "5_to_20ml", "ge_20ml"}
-            weights = sampling.get("weights", {})
+            groups = [(case_required, sampling.get("weights", {}))]
+        elif strategy == "case_and_component":
+            groups = [
+                (case_required, sampling.get("weights", {})),
+                (component_required, sampling.get("component_weights", {})),
+            ]
         else:
             raise ValueError(f"unsupported sampling.strategy: {strategy}")
-        if not required.issubset(weights):
-            raise ValueError("sampling weights are incomplete")
-        if any(float(weights[name]) <= 0 for name in required):
-            raise ValueError("sampling weights must be positive")
+        for required, weights in groups:
+            if not required.issubset(weights):
+                raise ValueError("sampling weights are incomplete")
+            if any(float(weights[name]) <= 0 for name in required):
+                raise ValueError("sampling weights must be positive")
     config["_config_path"] = str(candidate)
     return config
 
