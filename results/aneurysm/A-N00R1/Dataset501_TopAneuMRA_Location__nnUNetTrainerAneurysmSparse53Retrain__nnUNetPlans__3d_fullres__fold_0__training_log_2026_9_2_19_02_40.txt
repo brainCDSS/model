@@ -1,0 +1,159 @@
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+ 
+2026-09-02 19:02:40.989104: 
+============================================== 
+2026-09-02 19:02:40.998787: A-N00R1 SPARSE-53 CORRECTED TRAINING 
+2026-09-02 19:02:41.007838: Loss                     : GT-present-only Dice + CE 
+2026-09-02 19:02:41.014761: Foreground oversampling  : 0.75 
+2026-09-02 19:02:41.020156: Probabilistic oversample : True 
+2026-09-02 19:02:41.026455: EarlyStopping start      : 80 
+2026-09-02 19:02:41.030714: EarlyStopping patience   : 40 
+2026-09-02 19:02:41.035782: ============================================== 
+2026-09-02 19:02:42.088130: do_dummy_2d_data_aug: False 
+2026-09-02 19:02:42.093516: Using splits from existing split file: /content/nnUNet_preprocessed/Dataset501_TopAneuMRA_Location/splits_final.json 
+2026-09-02 19:02:42.097982: The split file contains 1 splits. 
+2026-09-02 19:02:42.102419: Desired fold for training: 0 
+2026-09-02 19:02:42.106784: This split has 215 training and 46 validation cases. 
+
+This is the configuration used by this training:
+Configuration name: 3d_fullres
+ {'data_identifier': 'nnUNetPlans_3d_fullres', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 2, 'patch_size': [80, 192, 128], 'median_image_size_in_voxels': [208.0, 450.0, 371.0], 'spacing': [0.4999990165233612, 0.3819439709186554, 0.3819440007209778], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'architecture': {'network_class_name': 'dynamic_network_architectures.architectures.unet.PlainConvUNet', 'arch_kwargs': {'n_stages': 6, 'features_per_stage': [32, 64, 128, 256, 320, 320], 'conv_op': 'torch.nn.modules.conv.Conv3d', 'kernel_sizes': [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]], 'strides': [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [1, 2, 2]], 'n_conv_per_stage': [2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2], 'conv_bias': True, 'norm_op': 'torch.nn.modules.instancenorm.InstanceNorm3d', 'norm_op_kwargs': {'eps': 1e-05, 'affine': True}, 'dropout_op': None, 'dropout_op_kwargs': None, 'nonlin': 'torch.nn.LeakyReLU', 'nonlin_kwargs': {'inplace': True}}, '_kw_requires_import': ['conv_op', 'norm_op', 'dropout_op', 'nonlin']}, 'batch_dice': True} 
+ 
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset501_TopAneuMRA_Location', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [0.4999990165233612, 0.3819439709186554, 0.3819440007209778], 'original_median_shape_after_transp': [200, 480, 405], 'image_reader_writer': 'NibabelIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 4188.98828125, 'mean': 585.0654946437089, 'median': 323.9964599609375, 'min': 0.0, 'percentile_00_5': 45.00389099121094, 'percentile_99_5': 2730.499267578125, 'std': 604.2323852192995}}} 
+ 
+2026-09-02 19:02:44.284593: Unable to plot network architecture: 
+2026-09-02 19:02:44.287433: No module named 'hiddenlayer' 
+2026-09-02 19:02:44.323990: 
+============================================================== 
+2026-09-02 19:02:44.326905: A-N00 FINAL TRAINING POLICY V2 
+2026-09-02 19:02:44.333094: Max epochs           : 300 
+2026-09-02 19:02:44.337945: Train iterations      : 250 
+2026-09-02 19:02:44.342808: Online val iterations : 50 
+2026-09-02 19:02:44.347588: Best monitor          : ema_fg_dice 
+2026-09-02 19:02:44.352833: EarlyStopping monitor : ema_fg_dice 
+2026-09-02 19:02:44.357092: Patience              : 40 
+2026-09-02 19:02:44.362177: Min delta             : 0.0001 
+2026-09-02 19:02:44.366677: Full-volume per epoch : DISABLED 
+2026-09-02 19:02:44.371079: Final Full-volume Val : 46 patients ONCE after training 
+2026-09-02 19:02:44.375145: Final Val checkpoint  : checkpoint_best.pth 
+2026-09-02 19:02:44.379225: Train Resume          : 1 completed iteration 
+2026-09-02 19:02:44.383759: Online-Val Resume     : 1 completed iteration 
+2026-09-02 19:02:44.388009: Final Patient Resume  : 1 completed patient 
+2026-09-02 19:02:44.392597: ==============================================================
+ 
+2026-09-02 19:02:44.398246:  
+2026-09-02 19:02:44.405586: Epoch 0 
+2026-09-02 19:02:44.409945: Current learning rate: 0.01 
+2026-09-02 19:17:45.823938: train_loss 0.199 
+2026-09-02 19:17:45.863494: online_val_loss 0.0064 
+2026-09-02 19:17:45.868239: online_patch_mean_fg_dice 0.0 
+2026-09-02 19:17:45.872173: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 19:17:45.876322: [BEST] New best ema_fg_dice=0.000000 
+2026-09-02 19:17:46.714911: Epoch time: 901.43 s 
+2026-09-02 19:17:52.331857:  
+2026-09-02 19:17:52.335155: Epoch 1 
+2026-09-02 19:17:52.341948: Current learning rate: 0.00997 
+2026-09-02 19:33:12.008640: train_loss 0.0196 
+2026-09-02 19:33:12.150885: online_val_loss 0.0182 
+2026-09-02 19:33:12.158049: online_patch_mean_fg_dice 0.0 
+2026-09-02 19:33:12.167740: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 19:33:12.595280: Epoch time: 919.68 s 
+2026-09-02 19:33:14.750436:  
+2026-09-02 19:33:14.753977: Epoch 2 
+2026-09-02 19:33:14.760396: Current learning rate: 0.00994 
+2026-09-02 19:48:46.606752: train_loss 0.027 
+2026-09-02 19:48:46.629640: online_val_loss 0.0164 
+2026-09-02 19:48:46.639038: online_patch_mean_fg_dice 0.0 
+2026-09-02 19:48:46.646157: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 19:48:46.656260: Epoch time: 931.86 s 
+2026-09-02 19:48:50.128998:  
+2026-09-02 19:48:50.132698: Epoch 3 
+2026-09-02 19:48:50.138457: Current learning rate: 0.00991 
+2026-09-02 20:04:36.742357: train_loss 0.015 
+2026-09-02 20:04:36.795010: online_val_loss 0.0088 
+2026-09-02 20:04:36.800144: online_patch_mean_fg_dice 0.0 
+2026-09-02 20:04:36.805302: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 20:04:36.809949: Epoch time: 946.61 s 
+2026-09-02 20:04:39.673125:  
+2026-09-02 20:04:39.676912: Epoch 4 
+2026-09-02 20:04:39.684047: Current learning rate: 0.00988 
+2026-09-02 20:19:51.077080: train_loss 0.0106 
+2026-09-02 20:19:51.087468: online_val_loss 0.0072 
+2026-09-02 20:19:51.095132: online_patch_mean_fg_dice 0.0 
+2026-09-02 20:19:51.099883: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 20:19:51.106937: Epoch time: 911.40 s 
+2026-09-02 20:19:53.740356:  
+2026-09-02 20:19:53.744219: Epoch 5 
+2026-09-02 20:19:53.751749: Current learning rate: 0.00985 
+2026-09-02 20:34:35.500462: train_loss 0.0072 
+2026-09-02 20:34:35.533881: online_val_loss 0.0154 
+2026-09-02 20:34:35.541523: online_patch_mean_fg_dice 0.0 
+2026-09-02 20:34:35.551517: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 20:34:35.558459: Epoch time: 881.76 s 
+2026-09-02 20:34:38.877217:  
+2026-09-02 20:34:38.882579: Epoch 6 
+2026-09-02 20:34:38.900558: Current learning rate: 0.00982 
+2026-09-02 20:49:34.122755: train_loss 0.0076 
+2026-09-02 20:49:34.157429: online_val_loss 0.0032 
+2026-09-02 20:49:34.171298: online_patch_mean_fg_dice 0.0 
+2026-09-02 20:49:34.179773: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 20:49:34.184448: Epoch time: 895.25 s 
+2026-09-02 20:49:37.281769:  
+2026-09-02 20:49:37.285368: Epoch 7 
+2026-09-02 20:49:37.291293: Current learning rate: 0.00979 
+2026-09-02 21:05:03.411294: train_loss 0.0017 
+2026-09-02 21:05:03.444771: online_val_loss 0.0076 
+2026-09-02 21:05:03.453217: online_patch_mean_fg_dice 0.0 
+2026-09-02 21:05:03.458936: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 21:05:03.464181: Epoch time: 926.13 s 
+2026-09-02 21:05:09.417195:  
+2026-09-02 21:05:09.420927: Epoch 8 
+2026-09-02 21:05:09.428600: Current learning rate: 0.00976 
+2026-09-02 21:20:10.389921: train_loss 0.0142 
+2026-09-02 21:20:10.405191: online_val_loss 0.006 
+2026-09-02 21:20:10.412235: online_patch_mean_fg_dice 0.0 
+2026-09-02 21:20:10.419515: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 21:20:10.424718: Epoch time: 900.97 s 
+2026-09-02 21:20:14.772099:  
+2026-09-02 21:20:14.776018: Epoch 9 
+2026-09-02 21:20:14.780584: Current learning rate: 0.00973 
+2026-09-02 21:35:18.298452: train_loss 0.0052 
+2026-09-02 21:35:18.321445: online_val_loss -0.0029 
+2026-09-02 21:35:18.329561: online_patch_mean_fg_dice 0.0 
+2026-09-02 21:35:18.335641: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 21:35:18.341174: Epoch time: 903.53 s 
+2026-09-02 21:35:25.474456:  
+2026-09-02 21:35:25.477296: Epoch 10 
+2026-09-02 21:35:25.483086: Current learning rate: 0.0097 
+2026-09-02 21:50:36.719749: train_loss -0.0074 
+2026-09-02 21:50:36.731484: online_val_loss 0.0006 
+2026-09-02 21:50:36.735665: online_patch_mean_fg_dice 0.0 
+2026-09-02 21:50:36.743822: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor) 
+2026-09-02 21:50:36.751954: [BEST] New best ema_fg_dice=0.000004 
+2026-09-02 21:50:38.872225: Epoch time: 911.25 s 
+2026-09-02 21:50:42.261511:  
+2026-09-02 21:50:42.265078: Epoch 11 
+2026-09-02 21:50:42.271429: Current learning rate: 0.00967 
+2026-09-02 22:06:14.547458: train_loss -0.0093 
+2026-09-02 22:06:14.586213: online_val_loss -0.0166 
+2026-09-02 22:06:14.598022: online_patch_mean_fg_dice 0.0021 
+2026-09-02 22:06:14.606280: online_patch_ema_fg_dice 0.0002 (Best / EarlyStopping monitor) 
+2026-09-02 22:06:14.612889: [BEST] New best ema_fg_dice=0.000213 
+2026-09-02 22:06:16.035469: Epoch time: 932.29 s 
+2026-09-02 22:06:18.754500:  
+2026-09-02 22:06:18.757877: Epoch 12 
+2026-09-02 22:06:18.763146: Current learning rate: 0.00964 
+2026-09-02 22:22:34.424195: train_loss -0.0145 
+2026-09-02 22:22:34.441224: online_val_loss -0.0232 
+2026-09-02 22:22:34.447957: online_patch_mean_fg_dice 0.0079 
+2026-09-02 22:22:34.453498: online_patch_ema_fg_dice 0.001 (Best / EarlyStopping monitor) 
+2026-09-02 22:22:34.457821: [BEST] New best ema_fg_dice=0.000981 
+2026-09-02 22:22:36.342256: Epoch time: 975.67 s 
+2026-09-02 22:22:39.325970:  
+2026-09-02 22:22:39.329202: Epoch 13 
+2026-09-02 22:22:39.335637: Current learning rate: 0.00961 

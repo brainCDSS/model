@@ -1,0 +1,458 @@
+
+
+================================================================================
+A-N00R1 NEW
+START=2026-09-02T19:02:34.093535
+COMMAND=/content/venv312/bin/nnUNetv2_train 501 3d_fullres 0 -tr nnUNetTrainerAneurysmSparse53Retrain -p nnUNetPlans -device cuda
+================================================================================
+
+############################
+INFO: You are using the old nnU-Net default plans. We have updated our recommendations. Please consider using those instead! Read more here: https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md
+############################
+
+Trainer 'nnUNetTrainerAneurysmSparse53Retrain' not found in nnunetv2.training.nnUNetTrainer.
+Searching in external trainer paths from environment variable 'nnUNet_extTrainer'...
+Searching in: /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers
+Searching for class nnUNetTrainerAneurysmSparse53Retrain in folder /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers with current module None
+  Inspecting module: configurable_trainer
+  Inspecting module: nnUNetTrainerAneurysmEarlyStopping
+  Inspecting module: nnUNetTrainerAneurysmEarlyStopping_before_cuda_rng_fix_20260902_151156
+  Inspecting module: nnUNetTrainerAneurysmEarlyStopping_before_rng_compat_fix_20260902_150737
+  Inspecting module: nnUNetTrainerAneurysmSparse53Retrain
+Found class nnUNetTrainerAneurysmSparse53Retrain in nnUNetTrainerAneurysmSparse53Retrain
+Using trainer 'nnUNetTrainerAneurysmSparse53Retrain' from: /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers
+Using device: cuda:0
+
+#######################################################################
+Please cite the following paper when using nnU-Net:
+Isensee, F., Jaeger, P. F., Kohl, S. A., Petersen, J., & Maier-Hein, K. H. (2021). nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature methods, 18(2), 203-211.
+#######################################################################
+
+2026-09-02 19:02:40.989104: 
+==============================================
+2026-09-02 19:02:40.998787: A-N00R1 SPARSE-53 CORRECTED TRAINING
+2026-09-02 19:02:41.007838: Loss                     : GT-present-only Dice + CE
+2026-09-02 19:02:41.014761: Foreground oversampling  : 0.75
+2026-09-02 19:02:41.020156: Probabilistic oversample : True
+2026-09-02 19:02:41.026455: EarlyStopping start      : 80
+2026-09-02 19:02:41.030714: EarlyStopping patience   : 40
+2026-09-02 19:02:41.035782: ==============================================
+2026-09-02 19:02:42.088130: do_dummy_2d_data_aug: False
+2026-09-02 19:02:42.093516: Using splits from existing split file: /content/nnUNet_preprocessed/Dataset501_TopAneuMRA_Location/splits_final.json
+2026-09-02 19:02:42.097982: The split file contains 1 splits.
+2026-09-02 19:02:42.102419: Desired fold for training: 0
+2026-09-02 19:02:42.106784: This split has 215 training and 46 validation cases.
+
+This is the configuration used by this training:
+Configuration name: 3d_fullres
+ {'data_identifier': 'nnUNetPlans_3d_fullres', 'preprocessor_name': 'DefaultPreprocessor', 'batch_size': 2, 'patch_size': [80, 192, 128], 'median_image_size_in_voxels': [208.0, 450.0, 371.0], 'spacing': [0.4999990165233612, 0.3819439709186554, 0.3819440007209778], 'normalization_schemes': ['ZScoreNormalization'], 'use_mask_for_norm': [False], 'resampling_fn_data': 'resample_data_or_seg_to_shape', 'resampling_fn_seg': 'resample_data_or_seg_to_shape', 'resampling_fn_data_kwargs': {'is_seg': False, 'order': 3, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_seg_kwargs': {'is_seg': True, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'resampling_fn_probabilities': 'resample_data_or_seg_to_shape', 'resampling_fn_probabilities_kwargs': {'is_seg': False, 'order': 1, 'order_z': 0, 'force_separate_z': None}, 'architecture': {'network_class_name': 'dynamic_network_architectures.architectures.unet.PlainConvUNet', 'arch_kwargs': {'n_stages': 6, 'features_per_stage': [32, 64, 128, 256, 320, 320], 'conv_op': 'torch.nn.modules.conv.Conv3d', 'kernel_sizes': [[3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3], [3, 3, 3]], 'strides': [[1, 1, 1], [2, 2, 2], [2, 2, 2], [2, 2, 2], [2, 2, 2], [1, 2, 2]], 'n_conv_per_stage': [2, 2, 2, 2, 2, 2], 'n_conv_per_stage_decoder': [2, 2, 2, 2, 2], 'conv_bias': True, 'norm_op': 'torch.nn.modules.instancenorm.InstanceNorm3d', 'norm_op_kwargs': {'eps': 1e-05, 'affine': True}, 'dropout_op': None, 'dropout_op_kwargs': None, 'nonlin': 'torch.nn.LeakyReLU', 'nonlin_kwargs': {'inplace': True}}, '_kw_requires_import': ['conv_op', 'norm_op', 'dropout_op', 'nonlin']}, 'batch_dice': True} 
+
+These are the global plan.json settings:
+ {'dataset_name': 'Dataset501_TopAneuMRA_Location', 'plans_name': 'nnUNetPlans', 'original_median_spacing_after_transp': [0.4999990165233612, 0.3819439709186554, 0.3819440007209778], 'original_median_shape_after_transp': [200, 480, 405], 'image_reader_writer': 'NibabelIO', 'transpose_forward': [0, 1, 2], 'transpose_backward': [0, 1, 2], 'experiment_planner_used': 'ExperimentPlanner', 'label_manager': 'LabelManager', 'foreground_intensity_properties_per_channel': {'0': {'max': 4188.98828125, 'mean': 585.0654946437089, 'median': 323.9964599609375, 'min': 0.0, 'percentile_00_5': 45.00389099121094, 'percentile_99_5': 2730.499267578125, 'std': 604.2323852192995}}} 
+
+2026-09-02 19:02:44.284593: Unable to plot network architecture:
+2026-09-02 19:02:44.287433: No module named 'hiddenlayer'
+2026-09-02 19:02:44.323990: 
+==============================================================
+2026-09-02 19:02:44.326905: A-N00 FINAL TRAINING POLICY V2
+2026-09-02 19:02:44.333094: Max epochs           : 300
+2026-09-02 19:02:44.337945: Train iterations      : 250
+2026-09-02 19:02:44.342808: Online val iterations : 50
+2026-09-02 19:02:44.347588: Best monitor          : ema_fg_dice
+2026-09-02 19:02:44.352833: EarlyStopping monitor : ema_fg_dice
+2026-09-02 19:02:44.357092: Patience              : 40
+2026-09-02 19:02:44.362177: Min delta             : 0.0001
+2026-09-02 19:02:44.366677: Full-volume per epoch : DISABLED
+2026-09-02 19:02:44.371079: Final Full-volume Val : 46 patients ONCE after training
+2026-09-02 19:02:44.375145: Final Val checkpoint  : checkpoint_best.pth
+2026-09-02 19:02:44.379225: Train Resume          : 1 completed iteration
+2026-09-02 19:02:44.383759: Online-Val Resume     : 1 completed iteration
+2026-09-02 19:02:44.388009: Final Patient Resume  : 1 completed patient
+2026-09-02 19:02:44.392597: ==============================================================
+
+2026-09-02 19:02:44.398246: 
+2026-09-02 19:02:44.405586: Epoch 0
+2026-09-02 19:02:44.409945: Current learning rate: 0.01
+[TRAIN] Epoch 1/300 | 25/250 (10.0%) | loss=1.665305 | ETA=14.6 min | resume_saved=25
+[TRAIN] Epoch 1/300 | 50/250 (20.0%) | loss=0.844544 | ETA=12.1 min | resume_saved=50
+[TRAIN] Epoch 1/300 | 75/250 (30.0%) | loss=0.569263 | ETA=10.7 min | resume_saved=75
+[TRAIN] Epoch 1/300 | 100/250 (40.0%) | loss=0.446144 | ETA=8.9 min | resume_saved=100
+[TRAIN] Epoch 1/300 | 125/250 (50.0%) | loss=0.366243 | ETA=7.3 min | resume_saved=125
+[TRAIN] Epoch 1/300 | 150/250 (60.0%) | loss=0.312635 | ETA=5.8 min | resume_saved=150
+[TRAIN] Epoch 1/300 | 175/250 (70.0%) | loss=0.269300 | ETA=4.4 min | resume_saved=175
+[TRAIN] Epoch 1/300 | 200/250 (80.0%) | loss=0.241583 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 1/300 | 225/250 (90.0%) | loss=0.216149 | ETA=1.4 min | resume_saved=225
+[TRAIN] Epoch 1/300 | 250/250 (100.0%) | loss=0.199011 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 1/300 | 25/50 (50.0%) | loss=0.005512 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 1/300 | 50/50 (100.0%) | loss=0.006389 | ETA=0.0 min | resume_saved=50
+/content/venv312/lib/python3.12/site-packages/nnunetv2/training/nnUNetTrainer/nnUNetTrainer.py:1160: RuntimeWarning: invalid value encountered in scalar divide
+  global_dc_per_class = [i for i in [2 * i / (2 * i + j + k) for i, j, k in zip(tp, fp, fn)]]
+2026-09-02 19:17:45.823938: train_loss 0.199
+2026-09-02 19:17:45.863494: online_val_loss 0.0064
+2026-09-02 19:17:45.868239: online_patch_mean_fg_dice 0.0
+2026-09-02 19:17:45.872173: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 19:17:45.876322: [BEST] New best ema_fg_dice=0.000000
+2026-09-02 19:17:46.714911: Epoch time: 901.43 s
+2026-09-02 19:17:52.331857: 
+2026-09-02 19:17:52.335155: Epoch 1
+2026-09-02 19:17:52.341948: Current learning rate: 0.00997
+[TRAIN] Epoch 2/300 | 25/250 (10.0%) | loss=0.001310 | ETA=12.8 min | resume_saved=25
+[TRAIN] Epoch 2/300 | 50/250 (20.0%) | loss=0.021509 | ETA=13.1 min | resume_saved=50
+[TRAIN] Epoch 2/300 | 75/250 (30.0%) | loss=0.016490 | ETA=11.1 min | resume_saved=75
+[TRAIN] Epoch 2/300 | 100/250 (40.0%) | loss=0.028954 | ETA=9.4 min | resume_saved=100
+[TRAIN] Epoch 2/300 | 125/250 (50.0%) | loss=0.029759 | ETA=7.5 min | resume_saved=125
+[TRAIN] Epoch 2/300 | 150/250 (60.0%) | loss=0.025182 | ETA=6.1 min | resume_saved=150
+[TRAIN] Epoch 2/300 | 175/250 (70.0%) | loss=0.022128 | ETA=4.5 min | resume_saved=175
+[TRAIN] Epoch 2/300 | 200/250 (80.0%) | loss=0.019891 | ETA=3.0 min | resume_saved=200
+[TRAIN] Epoch 2/300 | 225/250 (90.0%) | loss=0.018812 | ETA=1.5 min | resume_saved=225
+[TRAIN] Epoch 2/300 | 250/250 (100.0%) | loss=0.019630 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 2/300 | 25/50 (50.0%) | loss=0.036160 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 2/300 | 50/50 (100.0%) | loss=0.018230 | ETA=0.0 min | resume_saved=50
+2026-09-02 19:33:12.008640: train_loss 0.0196
+2026-09-02 19:33:12.150885: online_val_loss 0.0182
+2026-09-02 19:33:12.158049: online_patch_mean_fg_dice 0.0
+2026-09-02 19:33:12.167740: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 19:33:12.595280: Epoch time: 919.68 s
+2026-09-02 19:33:14.750436: 
+2026-09-02 19:33:14.753977: Epoch 2
+2026-09-02 19:33:14.760396: Current learning rate: 0.00994
+[TRAIN] Epoch 3/300 | 25/250 (10.0%) | loss=0.076010 | ETA=13.4 min | resume_saved=25
+[TRAIN] Epoch 3/300 | 50/250 (20.0%) | loss=0.046676 | ETA=12.0 min | resume_saved=50
+[TRAIN] Epoch 3/300 | 75/250 (30.0%) | loss=0.037232 | ETA=10.2 min | resume_saved=75
+[TRAIN] Epoch 3/300 | 100/250 (40.0%) | loss=0.030298 | ETA=9.0 min | resume_saved=100
+[TRAIN] Epoch 3/300 | 125/250 (50.0%) | loss=0.031423 | ETA=7.5 min | resume_saved=125
+[TRAIN] Epoch 3/300 | 150/250 (60.0%) | loss=0.037773 | ETA=6.0 min | resume_saved=150
+[TRAIN] Epoch 3/300 | 175/250 (70.0%) | loss=0.033034 | ETA=4.5 min | resume_saved=175
+[TRAIN] Epoch 3/300 | 200/250 (80.0%) | loss=0.029328 | ETA=3.0 min | resume_saved=200
+[TRAIN] Epoch 3/300 | 225/250 (90.0%) | loss=0.028568 | ETA=1.5 min | resume_saved=225
+[TRAIN] Epoch 3/300 | 250/250 (100.0%) | loss=0.026994 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 3/300 | 25/50 (50.0%) | loss=0.007096 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 3/300 | 50/50 (100.0%) | loss=0.016450 | ETA=0.0 min | resume_saved=50
+2026-09-02 19:48:46.606752: train_loss 0.027
+2026-09-02 19:48:46.629640: online_val_loss 0.0164
+2026-09-02 19:48:46.639038: online_patch_mean_fg_dice 0.0
+2026-09-02 19:48:46.646157: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 19:48:46.656260: Epoch time: 931.86 s
+2026-09-02 19:48:50.128998: 
+2026-09-02 19:48:50.132698: Epoch 3
+2026-09-02 19:48:50.138457: Current learning rate: 0.00991
+[TRAIN] Epoch 4/300 | 25/250 (10.0%) | loss=0.029969 | ETA=14.0 min | resume_saved=25
+[TRAIN] Epoch 4/300 | 50/250 (20.0%) | loss=0.017904 | ETA=11.9 min | resume_saved=50
+[TRAIN] Epoch 4/300 | 75/250 (30.0%) | loss=0.017532 | ETA=10.0 min | resume_saved=75
+[TRAIN] Epoch 4/300 | 100/250 (40.0%) | loss=0.014670 | ETA=8.5 min | resume_saved=100
+[TRAIN] Epoch 4/300 | 125/250 (50.0%) | loss=0.015062 | ETA=7.5 min | resume_saved=125
+[TRAIN] Epoch 4/300 | 150/250 (60.0%) | loss=0.015605 | ETA=6.0 min | resume_saved=150
+[TRAIN] Epoch 4/300 | 175/250 (70.0%) | loss=0.015585 | ETA=4.5 min | resume_saved=175
+[TRAIN] Epoch 4/300 | 200/250 (80.0%) | loss=0.014645 | ETA=3.0 min | resume_saved=200
+[TRAIN] Epoch 4/300 | 225/250 (90.0%) | loss=0.016330 | ETA=1.5 min | resume_saved=225
+[TRAIN] Epoch 4/300 | 250/250 (100.0%) | loss=0.015040 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 4/300 | 25/50 (50.0%) | loss=0.008309 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 4/300 | 50/50 (100.0%) | loss=0.008777 | ETA=0.0 min | resume_saved=50
+2026-09-02 20:04:36.742357: train_loss 0.015
+2026-09-02 20:04:36.795010: online_val_loss 0.0088
+2026-09-02 20:04:36.800144: online_patch_mean_fg_dice 0.0
+2026-09-02 20:04:36.805302: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 20:04:36.809949: Epoch time: 946.61 s
+2026-09-02 20:04:39.673125: 
+2026-09-02 20:04:39.676912: Epoch 4
+2026-09-02 20:04:39.684047: Current learning rate: 0.00988
+[TRAIN] Epoch 5/300 | 25/250 (10.0%) | loss=0.002316 | ETA=13.0 min | resume_saved=25
+[TRAIN] Epoch 5/300 | 50/250 (20.0%) | loss=0.013514 | ETA=11.0 min | resume_saved=50
+[TRAIN] Epoch 5/300 | 75/250 (30.0%) | loss=0.017657 | ETA=9.9 min | resume_saved=75
+[TRAIN] Epoch 5/300 | 100/250 (40.0%) | loss=0.013055 | ETA=8.5 min | resume_saved=100
+[TRAIN] Epoch 5/300 | 125/250 (50.0%) | loss=0.013545 | ETA=7.3 min | resume_saved=125
+[TRAIN] Epoch 5/300 | 150/250 (60.0%) | loss=0.011161 | ETA=5.9 min | resume_saved=150
+[TRAIN] Epoch 5/300 | 175/250 (70.0%) | loss=0.009318 | ETA=4.4 min | resume_saved=175
+[TRAIN] Epoch 5/300 | 200/250 (80.0%) | loss=0.011933 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 5/300 | 225/250 (90.0%) | loss=0.011423 | ETA=1.5 min | resume_saved=225
+[TRAIN] Epoch 5/300 | 250/250 (100.0%) | loss=0.010611 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 5/300 | 25/50 (50.0%) | loss=0.004042 | ETA=0.4 min | resume_saved=25
+[ONLINE-VAL] Epoch 5/300 | 50/50 (100.0%) | loss=0.007229 | ETA=0.0 min | resume_saved=50
+2026-09-02 20:19:51.077080: train_loss 0.0106
+2026-09-02 20:19:51.087468: online_val_loss 0.0072
+2026-09-02 20:19:51.095132: online_patch_mean_fg_dice 0.0
+2026-09-02 20:19:51.099883: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 20:19:51.106937: Epoch time: 911.40 s
+2026-09-02 20:19:53.740356: 
+2026-09-02 20:19:53.744219: Epoch 5
+2026-09-02 20:19:53.751749: Current learning rate: 0.00985
+[TRAIN] Epoch 6/300 | 25/250 (10.0%) | loss=0.015656 | ETA=11.8 min | resume_saved=25
+[TRAIN] Epoch 6/300 | 50/250 (20.0%) | loss=0.010634 | ETA=11.3 min | resume_saved=50
+[TRAIN] Epoch 6/300 | 75/250 (30.0%) | loss=0.007437 | ETA=9.9 min | resume_saved=75
+[TRAIN] Epoch 6/300 | 100/250 (40.0%) | loss=0.012556 | ETA=8.4 min | resume_saved=100
+[TRAIN] Epoch 6/300 | 125/250 (50.0%) | loss=0.009853 | ETA=7.1 min | resume_saved=125
+[TRAIN] Epoch 6/300 | 150/250 (60.0%) | loss=0.007356 | ETA=5.8 min | resume_saved=150
+[TRAIN] Epoch 6/300 | 175/250 (70.0%) | loss=0.006636 | ETA=4.3 min | resume_saved=175
+[TRAIN] Epoch 6/300 | 200/250 (80.0%) | loss=0.006255 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 6/300 | 225/250 (90.0%) | loss=0.005718 | ETA=1.4 min | resume_saved=225
+[TRAIN] Epoch 6/300 | 250/250 (100.0%) | loss=0.007195 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 6/300 | 25/50 (50.0%) | loss=0.011337 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 6/300 | 50/50 (100.0%) | loss=0.015426 | ETA=0.0 min | resume_saved=50
+2026-09-02 20:34:35.500462: train_loss 0.0072
+2026-09-02 20:34:35.533881: online_val_loss 0.0154
+2026-09-02 20:34:35.541523: online_patch_mean_fg_dice 0.0
+2026-09-02 20:34:35.551517: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 20:34:35.558459: Epoch time: 881.76 s
+2026-09-02 20:34:38.877217: 
+2026-09-02 20:34:38.882579: Epoch 6
+2026-09-02 20:34:38.900558: Current learning rate: 0.00982
+[TRAIN] Epoch 7/300 | 25/250 (10.0%) | loss=0.018283 | ETA=12.5 min | resume_saved=25
+[TRAIN] Epoch 7/300 | 50/250 (20.0%) | loss=0.010328 | ETA=11.1 min | resume_saved=50
+[TRAIN] Epoch 7/300 | 75/250 (30.0%) | loss=0.012364 | ETA=9.7 min | resume_saved=75
+[TRAIN] Epoch 7/300 | 100/250 (40.0%) | loss=0.014437 | ETA=8.6 min | resume_saved=100
+[TRAIN] Epoch 7/300 | 125/250 (50.0%) | loss=0.011160 | ETA=7.1 min | resume_saved=125
+[TRAIN] Epoch 7/300 | 150/250 (60.0%) | loss=0.011216 | ETA=5.7 min | resume_saved=150
+[TRAIN] Epoch 7/300 | 175/250 (70.0%) | loss=0.009153 | ETA=4.3 min | resume_saved=175
+[TRAIN] Epoch 7/300 | 200/250 (80.0%) | loss=0.009496 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 7/300 | 225/250 (90.0%) | loss=0.008984 | ETA=1.4 min | resume_saved=225
+[TRAIN] Epoch 7/300 | 250/250 (100.0%) | loss=0.007645 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 7/300 | 25/50 (50.0%) | loss=0.001665 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 7/300 | 50/50 (100.0%) | loss=0.003176 | ETA=0.0 min | resume_saved=50
+2026-09-02 20:49:34.122755: train_loss 0.0076
+2026-09-02 20:49:34.157429: online_val_loss 0.0032
+2026-09-02 20:49:34.171298: online_patch_mean_fg_dice 0.0
+2026-09-02 20:49:34.179773: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 20:49:34.184448: Epoch time: 895.25 s
+2026-09-02 20:49:37.281769: 
+2026-09-02 20:49:37.285368: Epoch 7
+2026-09-02 20:49:37.291293: Current learning rate: 0.00979
+[TRAIN] Epoch 8/300 | 25/250 (10.0%) | loss=0.015354 | ETA=12.2 min | resume_saved=25
+[TRAIN] Epoch 8/300 | 50/250 (20.0%) | loss=0.008929 | ETA=11.3 min | resume_saved=50
+[TRAIN] Epoch 8/300 | 75/250 (30.0%) | loss=0.004197 | ETA=10.2 min | resume_saved=75
+[TRAIN] Epoch 8/300 | 100/250 (40.0%) | loss=0.004332 | ETA=8.6 min | resume_saved=100
+[TRAIN] Epoch 8/300 | 125/250 (50.0%) | loss=0.000881 | ETA=7.1 min | resume_saved=125
+[TRAIN] Epoch 8/300 | 150/250 (60.0%) | loss=0.000435 | ETA=5.7 min | resume_saved=150
+[TRAIN] Epoch 8/300 | 175/250 (70.0%) | loss=-0.000078 | ETA=4.3 min | resume_saved=175
+[TRAIN] Epoch 8/300 | 200/250 (80.0%) | loss=-0.001381 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 8/300 | 225/250 (90.0%) | loss=-0.002750 | ETA=1.5 min | resume_saved=225
+[TRAIN] Epoch 8/300 | 250/250 (100.0%) | loss=0.001692 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 8/300 | 25/50 (50.0%) | loss=0.001940 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 8/300 | 50/50 (100.0%) | loss=0.007636 | ETA=0.0 min | resume_saved=50
+2026-09-02 21:05:03.411294: train_loss 0.0017
+2026-09-02 21:05:03.444771: online_val_loss 0.0076
+2026-09-02 21:05:03.453217: online_patch_mean_fg_dice 0.0
+2026-09-02 21:05:03.458936: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 21:05:03.464181: Epoch time: 926.13 s
+2026-09-02 21:05:09.417195: 
+2026-09-02 21:05:09.420927: Epoch 8
+2026-09-02 21:05:09.428600: Current learning rate: 0.00976
+[TRAIN] Epoch 9/300 | 25/250 (10.0%) | loss=0.025826 | ETA=13.5 min | resume_saved=25
+[TRAIN] Epoch 9/300 | 50/250 (20.0%) | loss=0.018643 | ETA=12.6 min | resume_saved=50
+[TRAIN] Epoch 9/300 | 75/250 (30.0%) | loss=0.017169 | ETA=10.4 min | resume_saved=75
+[TRAIN] Epoch 9/300 | 100/250 (40.0%) | loss=0.014158 | ETA=8.9 min | resume_saved=100
+[TRAIN] Epoch 9/300 | 125/250 (50.0%) | loss=0.011713 | ETA=7.4 min | resume_saved=125
+[TRAIN] Epoch 9/300 | 150/250 (60.0%) | loss=0.010405 | ETA=5.9 min | resume_saved=150
+[TRAIN] Epoch 9/300 | 175/250 (70.0%) | loss=0.009334 | ETA=4.3 min | resume_saved=175
+[TRAIN] Epoch 9/300 | 200/250 (80.0%) | loss=0.011501 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 9/300 | 225/250 (90.0%) | loss=0.014430 | ETA=1.4 min | resume_saved=225
+[TRAIN] Epoch 9/300 | 250/250 (100.0%) | loss=0.014185 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 9/300 | 25/50 (50.0%) | loss=0.007199 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 9/300 | 50/50 (100.0%) | loss=0.005956 | ETA=0.0 min | resume_saved=50
+2026-09-02 21:20:10.389921: train_loss 0.0142
+2026-09-02 21:20:10.405191: online_val_loss 0.006
+2026-09-02 21:20:10.412235: online_patch_mean_fg_dice 0.0
+2026-09-02 21:20:10.419515: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 21:20:10.424718: Epoch time: 900.97 s
+2026-09-02 21:20:14.772099: 
+2026-09-02 21:20:14.776018: Epoch 9
+2026-09-02 21:20:14.780584: Current learning rate: 0.00973
+[TRAIN] Epoch 10/300 | 25/250 (10.0%) | loss=-0.002149 | ETA=12.8 min | resume_saved=25
+[TRAIN] Epoch 10/300 | 50/250 (20.0%) | loss=0.002444 | ETA=11.1 min | resume_saved=50
+[TRAIN] Epoch 10/300 | 75/250 (30.0%) | loss=0.004722 | ETA=10.1 min | resume_saved=75
+[TRAIN] Epoch 10/300 | 100/250 (40.0%) | loss=0.010321 | ETA=8.6 min | resume_saved=100
+[TRAIN] Epoch 10/300 | 125/250 (50.0%) | loss=0.009202 | ETA=7.1 min | resume_saved=125
+[TRAIN] Epoch 10/300 | 150/250 (60.0%) | loss=0.008892 | ETA=5.7 min | resume_saved=150
+[TRAIN] Epoch 10/300 | 175/250 (70.0%) | loss=0.007396 | ETA=4.3 min | resume_saved=175
+[TRAIN] Epoch 10/300 | 200/250 (80.0%) | loss=0.007011 | ETA=2.9 min | resume_saved=200
+[TRAIN] Epoch 10/300 | 225/250 (90.0%) | loss=0.005273 | ETA=1.4 min | resume_saved=225
+[TRAIN] Epoch 10/300 | 250/250 (100.0%) | loss=0.005216 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 10/300 | 25/50 (50.0%) | loss=-0.003600 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 10/300 | 50/50 (100.0%) | loss=-0.002877 | ETA=0.0 min | resume_saved=50
+2026-09-02 21:35:18.298452: train_loss 0.0052
+2026-09-02 21:35:18.321445: online_val_loss -0.0029
+2026-09-02 21:35:18.329561: online_patch_mean_fg_dice 0.0
+2026-09-02 21:35:18.335641: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 21:35:18.341174: Epoch time: 903.53 s
+2026-09-02 21:35:25.474456: 
+2026-09-02 21:35:25.477296: Epoch 10
+2026-09-02 21:35:25.483086: Current learning rate: 0.0097
+[TRAIN] Epoch 11/300 | 25/250 (10.0%) | loss=-0.003120 | ETA=12.8 min | resume_saved=25
+[TRAIN] Epoch 11/300 | 50/250 (20.0%) | loss=-0.007502 | ETA=11.4 min | resume_saved=50
+[TRAIN] Epoch 11/300 | 75/250 (30.0%) | loss=-0.009235 | ETA=10.0 min | resume_saved=75
+[TRAIN] Epoch 11/300 | 100/250 (40.0%) | loss=-0.009596 | ETA=8.6 min | resume_saved=100
+[TRAIN] Epoch 11/300 | 125/250 (50.0%) | loss=-0.012990 | ETA=7.2 min | resume_saved=125
+[TRAIN] Epoch 11/300 | 150/250 (60.0%) | loss=-0.013113 | ETA=5.7 min | resume_saved=150
+[TRAIN] Epoch 11/300 | 175/250 (70.0%) | loss=-0.011956 | ETA=4.3 min | resume_saved=175
+[TRAIN] Epoch 11/300 | 200/250 (80.0%) | loss=-0.008582 | ETA=2.8 min | resume_saved=200
+[TRAIN] Epoch 11/300 | 225/250 (90.0%) | loss=-0.008678 | ETA=1.4 min | resume_saved=225
+[TRAIN] Epoch 11/300 | 250/250 (100.0%) | loss=-0.007416 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 11/300 | 25/50 (50.0%) | loss=-0.005773 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 11/300 | 50/50 (100.0%) | loss=0.000566 | ETA=0.0 min | resume_saved=50
+2026-09-02 21:50:36.719749: train_loss -0.0074
+2026-09-02 21:50:36.731484: online_val_loss 0.0006
+2026-09-02 21:50:36.735665: online_patch_mean_fg_dice 0.0
+2026-09-02 21:50:36.743822: online_patch_ema_fg_dice 0.0 (Best / EarlyStopping monitor)
+2026-09-02 21:50:36.751954: [BEST] New best ema_fg_dice=0.000004
+2026-09-02 21:50:38.872225: Epoch time: 911.25 s
+2026-09-02 21:50:42.261511: 
+2026-09-02 21:50:42.265078: Epoch 11
+2026-09-02 21:50:42.271429: Current learning rate: 0.00967
+[TRAIN] Epoch 12/300 | 25/250 (10.0%) | loss=0.009106 | ETA=14.9 min | resume_saved=25
+[TRAIN] Epoch 12/300 | 50/250 (20.0%) | loss=0.004528 | ETA=13.2 min | resume_saved=50
+[TRAIN] Epoch 12/300 | 75/250 (30.0%) | loss=-0.004110 | ETA=11.3 min | resume_saved=75
+[TRAIN] Epoch 12/300 | 100/250 (40.0%) | loss=-0.004982 | ETA=9.3 min | resume_saved=100
+[TRAIN] Epoch 12/300 | 125/250 (50.0%) | loss=-0.004261 | ETA=7.6 min | resume_saved=125
+[TRAIN] Epoch 12/300 | 150/250 (60.0%) | loss=-0.007459 | ETA=5.9 min | resume_saved=150
+[TRAIN] Epoch 12/300 | 175/250 (70.0%) | loss=-0.007957 | ETA=4.4 min | resume_saved=175
+[TRAIN] Epoch 12/300 | 200/250 (80.0%) | loss=-0.010485 | ETA=3.0 min | resume_saved=200
+[TRAIN] Epoch 12/300 | 225/250 (90.0%) | loss=-0.011391 | ETA=1.5 min | resume_saved=225
+[TRAIN] Epoch 12/300 | 250/250 (100.0%) | loss=-0.009335 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 12/300 | 25/50 (50.0%) | loss=-0.009986 | ETA=0.3 min | resume_saved=25
+[ONLINE-VAL] Epoch 12/300 | 50/50 (100.0%) | loss=-0.016596 | ETA=0.0 min | resume_saved=50
+2026-09-02 22:06:14.547458: train_loss -0.0093
+2026-09-02 22:06:14.586213: online_val_loss -0.0166
+2026-09-02 22:06:14.598022: online_patch_mean_fg_dice 0.0021
+2026-09-02 22:06:14.606280: online_patch_ema_fg_dice 0.0002 (Best / EarlyStopping monitor)
+2026-09-02 22:06:14.612889: [BEST] New best ema_fg_dice=0.000213
+2026-09-02 22:06:16.035469: Epoch time: 932.29 s
+2026-09-02 22:06:18.754500: 
+2026-09-02 22:06:18.757877: Epoch 12
+2026-09-02 22:06:18.763146: Current learning rate: 0.00964
+[TRAIN] Epoch 13/300 | 25/250 (10.0%) | loss=-0.005081 | ETA=13.4 min | resume_saved=25
+[TRAIN] Epoch 13/300 | 50/250 (20.0%) | loss=0.005450 | ETA=12.4 min | resume_saved=50
+[TRAIN] Epoch 13/300 | 75/250 (30.0%) | loss=0.005963 | ETA=11.6 min | resume_saved=75
+[TRAIN] Epoch 13/300 | 100/250 (40.0%) | loss=-0.000952 | ETA=10.0 min | resume_saved=100
+[TRAIN] Epoch 13/300 | 125/250 (50.0%) | loss=0.000178 | ETA=8.1 min | resume_saved=125
+[TRAIN] Epoch 13/300 | 150/250 (60.0%) | loss=-0.004927 | ETA=6.5 min | resume_saved=150
+[TRAIN] Epoch 13/300 | 175/250 (70.0%) | loss=-0.007900 | ETA=4.7 min | resume_saved=175
+[TRAIN] Epoch 13/300 | 200/250 (80.0%) | loss=-0.010044 | ETA=3.2 min | resume_saved=200
+[TRAIN] Epoch 13/300 | 225/250 (90.0%) | loss=-0.012979 | ETA=1.6 min | resume_saved=225
+[TRAIN] Epoch 13/300 | 250/250 (100.0%) | loss=-0.014538 | ETA=0.0 min | resume_saved=250
+[ONLINE-VAL] Epoch 13/300 | 25/50 (50.0%) | loss=-0.025924 | ETA=0.4 min | resume_saved=25
+[ONLINE-VAL] Epoch 13/300 | 50/50 (100.0%) | loss=-0.023185 | ETA=0.0 min | resume_saved=50
+2026-09-02 22:22:34.424195: train_loss -0.0145
+2026-09-02 22:22:34.441224: online_val_loss -0.0232
+2026-09-02 22:22:34.447957: online_patch_mean_fg_dice 0.0079
+2026-09-02 22:22:34.453498: online_patch_ema_fg_dice 0.001 (Best / EarlyStopping monitor)
+2026-09-02 22:22:34.457821: [BEST] New best ema_fg_dice=0.000981
+2026-09-02 22:22:36.342256: Epoch time: 975.67 s
+2026-09-02 22:22:39.325970: 
+2026-09-02 22:22:39.329202: Epoch 13
+2026-09-02 22:22:39.335637: Current learning rate: 0.00961
+[TRAIN] Epoch 14/300 | 25/250 (10.0%) | loss=-0.043037 | ETA=14.6 min | resume_saved=25
+[TRAIN] Epoch 14/300 | 50/250 (20.0%) | loss=-0.046329 | ETA=12.8 min | resume_saved=50
+[TRAIN] Epoch 14/300 | 75/250 (30.0%) | loss=-0.027056 | ETA=11.0 min | resume_saved=75
+[TRAIN] Epoch 14/300 | 100/250 (40.0%) | loss=-0.025467 | ETA=9.6 min | resume_saved=100
+[TRAIN] Epoch 14/300 | 125/250 (50.0%) | loss=-0.023594 | ETA=7.9 min | resume_saved=125
+Traceback (most recent call last):
+  File "/content/venv312/bin/nnUNetv2_train", line 6, in <module>
+    sys.exit(run_training_entry())
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 259, in run_training_entry
+    run_training(args.dataset_name_or_id, args.configuration, args.fold, args.tr, args.p, args.pretrained_weights,
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 200, in run_training
+    nnunet_trainer.run_training()
+  File "/content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers/nnUNetTrainerAneurysmEarlyStopping.py", line 4039, in run_training
+  File "/content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers/nnUNetTrainerAneurysmEarlyStopping.py", line 919, in _save_strict_resume_checkpoint
+  File "/content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers/nnUNetTrainerAneurysmEarlyStopping.py", line 410, in _atomic_torch_save
+FileNotFoundError: [Errno 2] No such file or directory: '/content/drive/MyDrive/Aneu_MRA/nnUNet_results_A_N00R1_sparse53/Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/fold_0/checkpoint_latest.pth.tmp' -> '/content/drive/MyDrive/Aneu_MRA/nnUNet_results_A_N00R1_sparse53/Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/fold_0/checkpoint_latest.pth'
+
+
+================================================================================
+A-N00R1 RESUME
+START=2026-09-03T02:17:26.414319
+COMMAND=/content/venv312/bin/nnUNetv2_train 501 3d_fullres 0 -tr nnUNetTrainerAneurysmSparse53Retrain -p nnUNetPlans -device cuda --c
+================================================================================
+
+############################
+INFO: You are using the old nnU-Net default plans. We have updated our recommendations. Please consider using those instead! Read more here: https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md
+############################
+
+Trainer 'nnUNetTrainerAneurysmSparse53Retrain' not found in nnunetv2.training.nnUNetTrainer.
+Searching in external trainer paths from environment variable 'nnUNet_extTrainer'...
+Searching in: /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers
+Searching for class nnUNetTrainerAneurysmSparse53Retrain in folder /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers with current module None
+  Inspecting module: configurable_trainer
+Traceback (most recent call last):
+  File "/content/venv312/bin/nnUNetv2_train", line 6, in <module>
+    sys.exit(run_training_entry())
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 259, in run_training_entry
+    run_training(args.dataset_name_or_id, args.configuration, args.fold, args.tr, args.p, args.pretrained_weights,
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 185, in run_training
+    nnunet_trainer = get_trainer_from_args(dataset_name_or_id, configuration, fold, trainer_class_name,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 39, in get_trainer_from_args
+    nnunet_trainer = recursive_find_trainer_class_by_name(trainer_name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/utilities/find_objects.py", line 33, in recursive_find_trainer_class_by_name
+    nnunet_trainer = recursive_find_python_class(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/utilities/find_class_by_name.py", line 169, in recursive_find_python_class
+    return _recursive_find_python_class(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/utilities/find_class_by_name.py", line 87, in _recursive_find_python_class
+    m = importlib.import_module(search_module)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers/configurable_trainer.py", line 24, in <module>
+    from brainon_ai.nnunet.config import config_digest, load_config
+ModuleNotFoundError: No module named 'brainon_ai'
+
+
+================================================================================
+A-N00R1 RESUME
+START=2026-09-03T02:36:22.873298
+COMMAND=/content/venv312/bin/nnUNetv2_train 501 3d_fullres 0 -tr nnUNetTrainerAneurysmSparse53Retrain -p nnUNetPlans -device cuda --c
+================================================================================
+
+############################
+INFO: You are using the old nnU-Net default plans. We have updated our recommendations. Please consider using those instead! Read more here: https://github.com/MIC-DKFZ/nnUNet/blob/master/documentation/resenc_presets.md
+############################
+
+Trainer 'nnUNetTrainerAneurysmSparse53Retrain' not found in nnunetv2.training.nnUNetTrainer.
+Searching in external trainer paths from environment variable 'nnUNet_extTrainer'...
+Searching in: /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers
+Searching for class nnUNetTrainerAneurysmSparse53Retrain in folder /content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers with current module None
+  Inspecting module: configurable_trainer
+Traceback (most recent call last):
+  File "/content/venv312/bin/nnUNetv2_train", line 6, in <module>
+    sys.exit(run_training_entry())
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 259, in run_training_entry
+    run_training(args.dataset_name_or_id, args.configuration, args.fold, args.tr, args.p, args.pretrained_weights,
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 185, in run_training
+    nnunet_trainer = get_trainer_from_args(dataset_name_or_id, configuration, fold, trainer_class_name,
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/run/run_training.py", line 39, in get_trainer_from_args
+    nnunet_trainer = recursive_find_trainer_class_by_name(trainer_name)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/utilities/find_objects.py", line 33, in recursive_find_trainer_class_by_name
+    nnunet_trainer = recursive_find_python_class(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/utilities/find_class_by_name.py", line 169, in recursive_find_python_class
+    return _recursive_find_python_class(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/content/venv312/lib/python3.12/site-packages/nnunetv2/utilities/find_class_by_name.py", line 87, in _recursive_find_python_class
+    m = importlib.import_module(search_module)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "<frozen importlib._bootstrap_external>", line 999, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/content/drive/MyDrive/Aneu_MRA/github/model/src/brainon_ai/nnunet/trainers/configurable_trainer.py", line 24, in <module>
+    from brainon_ai.nnunet.config import config_digest, load_config
+ModuleNotFoundError: No module named 'brainon_ai'

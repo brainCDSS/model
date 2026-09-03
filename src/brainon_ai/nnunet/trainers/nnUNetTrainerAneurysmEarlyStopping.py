@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import gc
 import json
 import os
 import random
@@ -461,10 +462,31 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             ]
         )
 
-        torch.set_rng_state(
-            state[
+        _a_n00_cpu_rng_state = state[
                 "torch_cpu"
             ]
+
+        if not isinstance(
+            _a_n00_cpu_rng_state,
+            torch.Tensor,
+        ):
+            _a_n00_cpu_rng_state = torch.as_tensor(
+                _a_n00_cpu_rng_state,
+                dtype=torch.uint8,
+                device="cpu",
+            )
+        else:
+            _a_n00_cpu_rng_state = (
+                _a_n00_cpu_rng_state
+                .detach()
+                .to(
+                    device="cpu",
+                    dtype=torch.uint8,
+                )
+            )
+
+        torch.set_rng_state(
+            _a_n00_cpu_rng_state
         )
 
         cuda_state = (
@@ -478,8 +500,237 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             and torch.cuda.is_available()
         ):
 
+            # =================================================
+            # A-N00 CUDA RNG strict-resume compatibility
+            #
+            # torch.cuda.set_rng_state_all() requires:
+            #     list[torch.ByteTensor]
+            #
+            # Runtime/serialization 과정에서
+            # Tensor / ndarray / list[int] 등으로 복원되어도
+            # 항상 CPU uint8 ByteTensor list로 정규화한다.
+            # =================================================
+
+            if isinstance(
+                cuda_state,
+                torch.Tensor,
+            ):
+
+                cuda_tensor = (
+                    cuda_state
+                    .detach()
+                    .to(
+                        device="cpu",
+                        dtype=torch.uint8,
+                    )
+                )
+
+                if cuda_tensor.ndim == 1:
+
+                    cuda_states = [
+                        cuda_tensor
+                        .reshape(-1)
+                        .contiguous()
+                    ]
+
+                elif cuda_tensor.ndim == 2:
+
+                    cuda_states = [
+                        row
+                        .reshape(-1)
+                        .contiguous()
+                        for row in cuda_tensor
+                    ]
+
+                else:
+
+                    raise RuntimeError(
+                        "Unsupported saved CUDA RNG tensor shape: "
+                        f"{tuple(cuda_tensor.shape)}"
+                    )
+
+            elif isinstance(
+                cuda_state,
+                np.ndarray,
+            ):
+
+                if cuda_state.ndim == 1:
+
+                    cuda_states = [
+                        torch.as_tensor(
+                            cuda_state,
+                            dtype=torch.uint8,
+                            device="cpu",
+                        )
+                        .reshape(-1)
+                        .contiguous()
+                    ]
+
+                elif cuda_state.ndim == 2:
+
+                    cuda_states = [
+                        torch.as_tensor(
+                            row,
+                            dtype=torch.uint8,
+                            device="cpu",
+                        )
+                        .reshape(-1)
+                        .contiguous()
+                        for row in cuda_state
+                    ]
+
+                else:
+
+                    raise RuntimeError(
+                        "Unsupported saved CUDA RNG ndarray shape: "
+                        f"{cuda_state.shape}"
+                    )
+
+            elif isinstance(
+                cuda_state,
+                (list, tuple),
+            ):
+
+                if len(cuda_state) == 0:
+
+                    raise RuntimeError(
+                        "Saved CUDA RNG state is empty."
+                    )
+
+                # [1, 2, 3, ...]
+                # 또는 [tensor(1), tensor(2), ...]
+                # = 단일 GPU RNG state가 list 형태로 직렬화된 경우
+                if all(
+                    isinstance(
+                        value,
+                        (int, np.integer),
+                    )
+                    or (
+                        isinstance(
+                            value,
+                            torch.Tensor,
+                        )
+                        and value.ndim == 0
+                    )
+                    for value in cuda_state
+                ):
+
+                    cuda_states = [
+                        torch.tensor(
+                            [
+                                int(
+                                    value.item()
+                                )
+                                if isinstance(
+                                    value,
+                                    torch.Tensor,
+                                )
+                                else int(value)
+                                for value
+                                in cuda_state
+                            ],
+                            dtype=torch.uint8,
+                            device="cpu",
+                        )
+                        .reshape(-1)
+                        .contiguous()
+                    ]
+
+                # 정상 multi-GPU 형식:
+                # [state_gpu0, state_gpu1, ...]
+                else:
+
+                    cuda_states = []
+
+                    for value in cuda_state:
+
+                        if isinstance(
+                            value,
+                            torch.Tensor,
+                        ):
+
+                            fixed = (
+                                value
+                                .detach()
+                                .to(
+                                    device="cpu",
+                                    dtype=torch.uint8,
+                                )
+                                .reshape(-1)
+                                .contiguous()
+                            )
+
+                        elif isinstance(
+                            value,
+                            np.ndarray,
+                        ):
+
+                            fixed = (
+                                torch.as_tensor(
+                                    value,
+                                    dtype=torch.uint8,
+                                    device="cpu",
+                                )
+                                .reshape(-1)
+                                .contiguous()
+                            )
+
+                        else:
+
+                            fixed = (
+                                torch.as_tensor(
+                                    value,
+                                    dtype=torch.uint8,
+                                    device="cpu",
+                                )
+                                .reshape(-1)
+                                .contiguous()
+                            )
+
+                        cuda_states.append(
+                            fixed
+                        )
+
+            else:
+
+                raise TypeError(
+                    "Unsupported saved CUDA RNG type: "
+                    f"{type(cuda_state)}"
+                )
+
+            # 마지막 형식 강제 보장
+            cuda_states = [
+                value
+                .detach()
+                .to(
+                    device="cpu",
+                    dtype=torch.uint8,
+                )
+                .reshape(-1)
+                .contiguous()
+                for value in cuda_states
+            ]
+
+            gpu_count = (
+                torch.cuda.device_count()
+            )
+
+            if len(cuda_states) != gpu_count:
+
+                raise RuntimeError(
+                    "CUDA RNG GPU count mismatch: "
+                    f"saved={len(cuda_states)}, "
+                    f"current={gpu_count}"
+                )
+
             torch.cuda.set_rng_state_all(
-                cuda_state
+                cuda_states
+            )
+
+            print(
+                "[RESUME] CUDA RNG restored "
+                f"for {gpu_count} GPU(s)",
+                flush=True,
             )
 
 
@@ -1939,6 +2190,324 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
     # FULL-VOLUME PATIENT VALIDATION
     # =========================================================
 
+
+    # =========================================================
+    # A_N00_MEMORY_SAFE_FINAL_EXPORT_V2
+    #
+    # 53-class logits 전체를 한꺼번에 original shape으로
+    # resample하지 않는다.
+    #
+    # 각 class를 동일 nnU-Net resampling 함수로 순차 처리하고
+    # running argmax를 수행한다.
+    #
+    # Dataset501은 class 0~52 contiguous multiclass임.
+    # =========================================================
+
+    def _export_prediction_memory_safe(
+        self,
+        prediction_logits,
+        properties,
+        output_filename_truncated,
+    ) -> None:
+
+        if self.label_manager.has_regions:
+            raise RuntimeError(
+                "A-N00 memory-safe export는 "
+                "mutually-exclusive class labels만 지원합니다."
+            )
+
+        num_heads = int(
+            prediction_logits.shape[0]
+        )
+
+        expected_labels = [
+            0,
+            *[
+                int(value)
+                for value
+                in self.label_manager.foreground_labels
+            ],
+        ]
+
+        if expected_labels != list(
+            range(num_heads)
+        ):
+            raise RuntimeError(
+                "A-N00 Location label/channel mapping mismatch. "
+                f"labels={expected_labels[:10]}... "
+                f"num_heads={num_heads}"
+            )
+
+        if num_heads != 53:
+            raise RuntimeError(
+                "Dataset501 Location은 53 output heads가 "
+                f"필요합니다. Actual={num_heads}"
+            )
+
+        # -----------------------------------------------------
+        # Official nnU-Net export와 동일 target shape / spacing
+        # -----------------------------------------------------
+
+        target_shape = tuple(
+            int(value)
+            for value
+            in properties[
+                "shape_after_cropping_and_before_resampling"
+            ]
+        )
+
+        spacing_transposed = [
+            properties["spacing"][i]
+            for i
+            in self.plans_manager.transpose_forward
+        ]
+
+        if (
+            len(
+                self.configuration_manager.spacing
+            )
+            ==
+            len(
+                properties[
+                    "shape_after_cropping_and_before_resampling"
+                ]
+            )
+        ):
+            current_spacing = (
+                self.configuration_manager.spacing
+            )
+
+        else:
+            current_spacing = [
+                spacing_transposed[0],
+                *self.configuration_manager.spacing,
+            ]
+
+        target_spacing = (
+            spacing_transposed
+        )
+
+        seg_dtype = (
+            np.uint8
+            if len(
+                self.label_manager.foreground_labels
+            ) < 255
+            else np.uint16
+        )
+
+        segmentation = np.zeros(
+            target_shape,
+            dtype=seg_dtype,
+        )
+
+        best_score = None
+
+        # -----------------------------------------------------
+        # Class-by-class resampling
+        #
+        # np.argmax와 동일하게 동점일 경우
+        # 먼저 등장한 class를 유지하기 위해
+        # 비교는 반드시 ">"를 사용한다.
+        # -----------------------------------------------------
+
+        for class_index in range(
+            num_heads
+        ):
+
+            channel = (
+                prediction_logits[
+                    class_index:
+                    class_index + 1
+                ]
+            )
+
+            if isinstance(
+                channel,
+                torch.Tensor,
+            ):
+
+                channel_numpy = (
+                    channel
+                    .detach()
+                    .to(
+                        device="cpu"
+                    )
+                    .numpy()
+                )
+
+            else:
+
+                channel_numpy = (
+                    np.asarray(
+                        channel
+                    )
+                )
+
+            resampled = (
+                self.configuration_manager
+                .resampling_fn_probabilities(
+                    channel_numpy,
+                    target_shape,
+                    current_spacing,
+                    target_spacing,
+                )
+            )
+
+            if isinstance(
+                resampled,
+                torch.Tensor,
+            ):
+
+                score = (
+                    resampled[0]
+                    .detach()
+                    .cpu()
+                    .numpy()
+                )
+
+            else:
+
+                score = np.asarray(
+                    resampled[0]
+                )
+
+            if best_score is None:
+
+                best_score = np.array(
+                    score,
+                    copy=True,
+                )
+
+            else:
+
+                better = (
+                    score
+                    > best_score
+                )
+
+                segmentation[
+                    better
+                ] = class_index
+
+                best_score[
+                    better
+                ] = score[
+                    better
+                ]
+
+                del better
+
+            del channel
+            del channel_numpy
+            del resampled
+            del score
+
+            gc.collect()
+
+        if best_score is None:
+            raise RuntimeError(
+                "Final Validation argmax 생성 실패"
+            )
+
+        del best_score
+
+        # -----------------------------------------------------
+        # Revert cropping
+        # -----------------------------------------------------
+
+        shape_before_cropping = tuple(
+            int(value)
+            for value
+            in properties[
+                "shape_before_cropping"
+            ]
+        )
+
+        segmentation_reverted = np.zeros(
+            shape_before_cropping,
+            dtype=seg_dtype,
+        )
+
+        bbox = properties[
+            "bbox_used_for_cropping"
+        ]
+
+        bbox_slicer = tuple(
+            slice(
+                int(bounds[0]),
+                int(bounds[1]),
+            )
+            for bounds
+            in bbox
+        )
+
+        expected_crop_shape = tuple(
+            int(bounds[1]) - int(bounds[0])
+            for bounds
+            in bbox
+        )
+
+        if (
+            tuple(segmentation.shape)
+            != expected_crop_shape
+        ):
+
+            raise RuntimeError(
+                "Final segmentation crop shape mismatch: "
+                f"{tuple(segmentation.shape)} "
+                f"!= {expected_crop_shape}"
+            )
+
+        segmentation_reverted[
+            bbox_slicer
+        ] = segmentation
+
+        del segmentation
+
+        # -----------------------------------------------------
+        # Revert transpose
+        # -----------------------------------------------------
+
+        segmentation_reverted = (
+            segmentation_reverted
+            .transpose(
+                self.plans_manager.transpose_backward
+            )
+        )
+
+        # -----------------------------------------------------
+        # Original geometry로 저장
+        # -----------------------------------------------------
+
+        image_reader_writer = (
+            self.plans_manager
+            .image_reader_writer_class()
+        )
+
+        output_file = (
+            str(
+                output_filename_truncated
+            )
+            +
+            self.dataset_json[
+                "file_ending"
+            ]
+        )
+
+        image_reader_writer.write_seg(
+            segmentation_reverted,
+            output_file,
+            properties,
+        )
+
+        del segmentation_reverted
+
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+
     def _run_patient_full_volume_validation(
         self,
     ):
@@ -2115,6 +2684,15 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
 
         self.network.eval()
 
+        # =====================================================
+        # A_N00_FINAL_MEMORY_PRE_CLEANUP_V2
+        # =====================================================
+
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         predictor = nnUNetPredictor(
             tile_step_size=0.5,
             use_gaussian=True,
@@ -2123,7 +2701,7 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
             # Safer on a T4 with 53-class Location output:
             # network inference remains on GPU while accumulation
             # can fall back to CPU memory.
-            perform_everything_on_device=False,
+            perform_everything_on_device=True,
 
             device=self.device,
             verbose=False,
@@ -2242,10 +2820,6 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
                             )
                         )
 
-                    prediction_logits = (
-                        prediction_logits.cpu()
-                    )
-
                     output_filename_truncated = str(
                         tmp_dir
                         / case_id
@@ -2253,15 +2827,18 @@ class nnUNetTrainerAneurysmEarlyStopping(nnUNetTrainer):
 
                     # Same original-geometry restoration pipeline
                     # used by official nnU-Net validation.
-                    export_prediction_from_logits(
+                    self._export_prediction_memory_safe(
                         prediction_logits,
                         properties,
-                        self.configuration_manager,
-                        self.plans_manager,
-                        self.dataset_json,
                         output_filename_truncated,
-                        False,
                     )
+
+                    del prediction_logits
+
+                    gc.collect()
+
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
 
                     pred_file = Path(
                         f"{output_filename_truncated}"
