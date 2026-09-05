@@ -47,7 +47,8 @@ def main():
     log_dir.mkdir(parents=True, exist_ok=True)
 
     cfg = load_config(config_path)
-    shutil.copy2(config_path, backup_root / "I-S00_effective_config.yaml")
+    experiment_id = cfg["experiment_id"]
+    shutil.copy2(config_path, backup_root / f"{experiment_id}_effective_config.yaml")
 
     seed = int(cfg["runtime"]["seed"])
     seed_everything(seed)
@@ -66,7 +67,7 @@ def main():
     test_records = build_records(data_root, "test")
 
     print("=" * 60)
-    print("I-S00 SegResNet Baseline")
+    print(f"{experiment_id} SegResNet")
     print("=" * 60)
     print("GPU :", torch.cuda.get_device_name(0))
     print("Train:", len(train_records))
@@ -212,7 +213,7 @@ def main():
 
     print()
     print("=" * 60)
-    print("I-S00 학습 종료")
+    print(f"{experiment_id} 학습 종료")
     print(f"Best Validation Dice: {early_stopping.best_dice:.4f}")
     print("=" * 60)
 

@@ -38,6 +38,16 @@ METRIC_COLUMNS = [
     "volume_similarity", "lesion_precision", "lesion_recall", "lesion_f1",
 ]
 
+POSITIVE_METRIC_COLUMNS = [
+    "dice", "iou", "precision", "recall_sensitivity", "hd95_mm", "assd_mm",
+]
+
+SIZE_GROUP_ORDER = [
+    "Small (<5 mL)",
+    "Medium (5-20 mL)",
+    "Large (>=20 mL)",
+]
+
 
 def _first(value):
     return value[0] if isinstance(value, (list, tuple)) else str(value)
@@ -55,9 +65,9 @@ def _case_status(pred, gt):
     return "GT_EMPTY_PRED_EMPTY"
 
 
-def _summary(patient_df):
+def _summary(patient_df, metric_columns=METRIC_COLUMNS):
     rows = []
-    for metric in METRIC_COLUMNS:
+    for metric in metric_columns:
         values = pd.to_numeric(patient_df[metric], errors="coerce").to_numpy(dtype=float)
         valid = values[np.isfinite(values)]
         if len(valid) == 0:
@@ -78,6 +88,30 @@ def _summary(patient_df):
                 "mean_95ci_high": ci_high,
             }
         )
+    return pd.DataFrame(rows)
+
+
+def _lesion_size_group(volume_ml):
+    if volume_ml < 5.0:
+        return "Small (<5 mL)"
+    if volume_ml < 20.0:
+        return "Medium (5-20 mL)"
+    return "Large (>=20 mL)"
+
+
+def _size_group_summary(positive_df):
+    rows = []
+    for group in SIZE_GROUP_ORDER:
+        group_df = positive_df[positive_df["size_group"] == group]
+        row = {
+            "size_group": group,
+            "n_cases": len(group_df),
+            "mean_lesion_volume_ml": group_df["gt_volume_ml"].mean(),
+            "median_lesion_volume_ml": group_df["gt_volume_ml"].median(),
+        }
+        for metric in POSITIVE_METRIC_COLUMNS:
+            row[f"macro_{metric}"] = group_df[metric].mean(skipna=True)
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -145,7 +179,7 @@ def evaluate_split(model, loader, device, config, prediction_dir=None):
         )
 
     patient_df = pd.DataFrame(patient_results)
-    return patient_df, _summary(patient_df)
+    return patient_df
 
 
 def main():
@@ -167,6 +201,7 @@ def main():
     checkpoint = load_checkpoint(checkpoint_path, device)
     config = checkpoint["config"]
     validate_config(config)
+    experiment_id = config["experiment_id"]
 
     model = build_model(config).to(device)
     load_model_state(model, checkpoint)
@@ -195,7 +230,7 @@ def main():
         prediction_dir.mkdir(parents=True)
 
     print("=" * 75)
-    print(f"I-S00 SegResNet {args.split.upper()} Evaluation")
+    print(f"{experiment_id} SegResNet {args.split.upper()} Evaluation")
     print("=" * 75)
     print("Checkpoint       :", checkpoint_path)
     print("Best Epoch       :", int(checkpoint["epoch"]) + 1)
@@ -207,7 +242,7 @@ def main():
     print("Overlap          :", config["evaluation"]["overlap"])
     print("=" * 75)
 
-    patient_df, summary_df = evaluate_split(
+    patient_df = evaluate_split(
         model, loader, device, config, prediction_dir
     )
     positive_df = patient_df[patient_df["gt_volume_ml"] > 0]
@@ -218,13 +253,41 @@ def main():
             > 0
         ]
     )
-    macro_dice_all = float(patient_df["dice"].mean())
-    macro_dice_positive = (
-        float(positive_df["dice"].mean()) if len(positive_df) else np.nan
+    if args.split == "val":
+        if len(positive_df) != 37:
+            raise RuntimeError(
+                f"GT-positive validation Case 수 오류: {len(positive_df)} (예상 37)"
+            )
+        if len(empty_gt_df) != 1:
+            raise RuntimeError(
+                f"GT-empty validation Case 수 오류: {len(empty_gt_df)} (예상 1)"
+            )
+
+    summary_df = _summary(positive_df, POSITIVE_METRIC_COLUMNS)
+    positive_df = positive_df.copy()
+    positive_df["size_group"] = positive_df["gt_volume_ml"].apply(
+        _lesion_size_group
+    )
+    size_summary_df = _size_group_summary(positive_df)
+
+    empty_detection_df = empty_gt_df[
+        ["case_id", "gt_volume_ml", "pred_volume_ml"]
+    ].copy()
+    empty_detection_df["gt_lesion_present"] = False
+    empty_detection_df["pred_lesion_present"] = (
+        empty_detection_df["pred_volume_ml"] > 0
+    )
+    empty_detection_df["result"] = np.where(
+        empty_detection_df["pred_lesion_present"], "WRONG", "CORRECT"
     )
 
+    macro_metrics = {
+        metric: float(positive_df[metric].mean(skipna=True))
+        for metric in POSITIVE_METRIC_COLUMNS
+    }
+
     metadata = {
-        "experiment_id": "I-S00",
+        "experiment_id": experiment_id,
         "evaluation_split": args.split,
         "checkpoint": str(checkpoint_path),
         "best_epoch": int(checkpoint["epoch"]) + 1,
@@ -235,10 +298,12 @@ def main():
         "empty_gt_false_positive_cases": len(
             false_positive_empty_cases
         ),
-        f"{args.split}_macro_dice_all": macro_dice_all,
-        f"{args.split}_median_dice_all": float(patient_df["dice"].median()),
-        f"{args.split}_std_dice_all": float(patient_df["dice"].std(ddof=1)),
-        f"{args.split}_macro_dice_gt_positive_only": macro_dice_positive,
+        "evaluation_rule": (
+            "GT-positive cases for segmentation metrics; "
+            "GT-empty cases for lesion presence only"
+        ),
+        "macro_metrics_gt_positive": macro_metrics,
+        "size_group_metrics": size_summary_df.to_dict(orient="records"),
         "threshold": float(config["evaluation"]["threshold"]),
         "roi_size": list(config["data"]["patch_size"]),
         "sw_batch_size": int(config["evaluation"]["sw_batch_size"]),
@@ -246,8 +311,18 @@ def main():
     }
 
     if output_dir is not None:
-        patient_df.to_csv(output_dir / f"{args.split}_patient_level_metrics.csv", index=False)
-        summary_df.to_csv(output_dir / f"{args.split}_summary_metrics.csv", index=False)
+        positive_df.to_csv(
+            output_dir / f"{args.split}_positive_case_metrics.csv", index=False
+        )
+        empty_detection_df.to_csv(
+            output_dir / f"{args.split}_empty_detection.csv", index=False
+        )
+        summary_df.to_csv(
+            output_dir / f"{args.split}_positive_summary_metrics.csv", index=False
+        )
+        size_summary_df.to_csv(
+            output_dir / f"{args.split}_size_group_summary.csv", index=False
+        )
         with (output_dir / f"{args.split}_evaluation_metadata.json").open(
             "w", encoding="utf-8"
         ) as handle:
@@ -257,8 +332,7 @@ def main():
     print(f"{args.split} Cases                  : {len(patient_df)}")
     print(f"GT-positive Cases            : {len(positive_df)}")
     print(f"GT-empty Cases               : {len(empty_gt_df)}")
-    print(f"Macro Dice (all cases)       : {macro_dice_all:.6f}")
-    print(f"Macro Dice (GT-positive)     : {macro_dice_positive:.6f}")
+    print(f"Macro Dice (GT-positive)     : {macro_metrics['dice']:.6f}")
     print(f"Checkpoint Best Val Dice     : {float(checkpoint['best_dice']):.6f}")
 
 
