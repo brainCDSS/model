@@ -1,0 +1,54 @@
+experiment:
+  name: nnunet_baseline_dice_ce_no_smooth
+  dataset_id: 1
+  configuration: 3d_fullres
+  fold: 0
+  device: auto
+  continue_training: false
+  validation_checkpoint: best_composite
+plans:
+  base_identifier: nnUNetPlans
+  output_identifier: ICHPlansBaselineDiceCENoSmoothV1
+  patch_size:
+  - 20
+  - 320
+  - 256
+  batch_size: 2
+trainer:
+  epochs: 1000
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  save_every: 1
+  learning_rate: 0.01
+  weight_decay: 3.0e-05
+  oversample_foreground_percent: 0.33
+  optimizer:
+    name: sgd
+    momentum: 0.99
+    nesterov: true
+  scheduler:
+    name: poly
+loss:
+  name: dice_ce
+  include_background: false
+  dice_weight: 1.0
+  ce_weight: 1.0
+  smooth: 0.0
+checkpoint:
+  dice_weight: 0.5
+  recall_weight: 0.5
+  min_delta: 0.0001
+pruning:
+  enabled: true
+  monitor: composite
+  min_epochs: 200
+  patience: 100
+  min_delta: 0.001
+network:
+  name: default
+full_validation:
+  enabled: true
+  interval: 5
+  archive_every_epoch: true
+  keep_top_k: 3
+  neighborhood_radius: 4

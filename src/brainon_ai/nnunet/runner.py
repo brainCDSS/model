@@ -115,6 +115,108 @@ def run_from_config(
     return Path(trainer.output_folder)
 
 
+def prepare_continuation_checkpoint(
+    checkpoint: dict[str, Any], config: dict[str, Any], config_sha256: str
+) -> dict[str, Any]:
+    """Retarget a full training checkpoint to a new, traceable continuation run."""
+    checkpoint["ich_config_sha256"] = config_sha256
+    checkpoint["ich_config"] = {
+        key: value for key, value in config.items() if not key.startswith("_")
+    }
+    checkpoint["_best_ema"] = None
+    state = checkpoint.setdefault("ich_state", {})
+    state.update(
+        {
+            "best_dice": float("-inf"),
+            "best_recall": float("-inf"),
+            "best_composite": float("-inf"),
+            "best_full_macro_dice": float("-inf"),
+            "best_full_macro_epoch": None,
+            "pruning": {"best": float("-inf"), "bad_checks": 0},
+        }
+    )
+    return checkpoint
+
+
+def run_continuation_from_config(
+    config_path: str | Path,
+    parent_checkpoint: str | Path,
+    data_root: str | Path,
+    results_root: str | Path,
+) -> Path:
+    config_path = set_config_environment(config_path)
+    config = load_config(config_path)
+    configure_paths(data_root, results_root)
+
+    import torch
+    from nnunetv2.run.run_training import get_trainer_from_args
+
+    experiment = config["experiment"]
+    continuation = config.get("continuation")
+    if not continuation:
+        raise ValueError("continuation 설정 섹션이 없습니다.")
+    parent_checkpoint = Path(parent_checkpoint).resolve()
+    if not parent_checkpoint.is_file():
+        raise FileNotFoundError(f"부모 checkpoint가 없습니다: {parent_checkpoint}")
+    device = resolve_device(str(experiment.get("device", "auto")))
+    trainer = get_trainer_from_args(
+        str(experiment["dataset_id"]),
+        str(experiment["configuration"]),
+        int(experiment["fold"]),
+        TRAINER_NAME,
+        str(config["plans"]["output_identifier"]),
+        False,
+        device=device,
+    )
+    checkpoint = torch.load(parent_checkpoint, map_location="cpu", weights_only=False)
+    expected_epoch = int(continuation["expected_parent_epoch"])
+    actual_epoch = int(checkpoint.get("current_epoch", -1))
+    if actual_epoch != expected_epoch:
+        raise RuntimeError(
+            f"부모 checkpoint epoch 불일치: expected={expected_epoch}, actual={actual_epoch}"
+        )
+    saved_plan = checkpoint.get("ich_config", {}).get("plans", {}).get("output_identifier")
+    expected_plan = str(continuation["parent_output_identifier"])
+    if saved_plan and saved_plan != expected_plan:
+        raise RuntimeError(
+            f"부모 plans 불일치: expected={expected_plan}, actual={saved_plan}"
+        )
+    checkpoint = prepare_continuation_checkpoint(
+        checkpoint, config, trainer.ich_config_digest
+    )
+    output_folder = Path(trainer.output_folder)
+    output_folder.mkdir(parents=True, exist_ok=True)
+    epoch_folder = output_folder / "epoch_checkpoints"
+    epoch_folder.mkdir(parents=True, exist_ok=True)
+    initial_checkpoint = epoch_folder / f"checkpoint_epoch_{actual_epoch:04d}.pth"
+    if not initial_checkpoint.is_file():
+        temporary = initial_checkpoint.with_name(initial_checkpoint.name + ".tmp")
+        torch.save(checkpoint, temporary)
+        os.replace(temporary, initial_checkpoint)
+    # nnU-Net 2.6.2 advertises dict support but only initializes its local
+    # checkpoint variable for string paths. Load the retargeted file instead.
+    trainer.load_checkpoint(str(initial_checkpoint))
+    metadata = {
+        "parent_experiment": continuation["parent_experiment"],
+        "parent_checkpoint": str(parent_checkpoint),
+        "parent_output_identifier": expected_plan,
+        "parent_epoch": actual_epoch,
+        "target_epoch": int(config["trainer"]["epochs"]),
+        "optimizer_state_restored": True,
+        "logger_history_restored": True,
+        "early_stopping_reset": True,
+        "early_stopping_enabled": bool(config["pruning"]["enabled"]),
+    }
+    (output_folder / "continuation_metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    if torch.cuda.is_available():
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
+    trainer.run_training()
+    return output_folder
+
+
 def write_launch_summary(
     config_path: str | Path, data_root: str | Path, results_root: str | Path
 ) -> dict[str, Any]:

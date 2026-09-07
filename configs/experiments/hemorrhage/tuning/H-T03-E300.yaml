@@ -1,0 +1,64 @@
+experiment:
+  name: h-t03-e300-continuation
+  dataset_id: 1
+  dataset_name: ICHBinary
+  configuration: 3d_fullres
+  fold: 0
+  device: auto
+  continue_training: false
+  validation_checkpoint: best_composite
+plans:
+  base_identifier: ICHPlansTuneA04B06AdamWV1
+  output_identifier: ICHPlansTuneA04B06AdamWE300V1
+  patch_size:
+  - 20
+  - 320
+  - 256
+  batch_size: 2
+trainer:
+  epochs: 300
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  save_every: 1
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  oversample_foreground_percent: 0.33
+  optimizer:
+    name: adamw
+  scheduler:
+    name: poly
+loss:
+  name: tversky_ce
+  include_background: false
+  tversky_weight: 1.0
+  ce_weight: 1.0
+  alpha: 0.4
+  beta: 0.6
+  smooth: 1.0e-05
+checkpoint:
+  dice_weight: 0.5
+  recall_weight: 0.5
+  min_delta: 0.0001
+pruning:
+  enabled: false
+  monitor: composite
+  min_epochs: 300
+  patience: 30
+  min_delta: 0.001
+network:
+  name: default
+sampling:
+  enabled: false
+full_validation:
+  enabled: true
+  interval: 5
+  archive_every_epoch: true
+  keep_top_k: 3
+  neighborhood_radius: 4
+continuation:
+  parent_experiment: H-T03
+  parent_output_identifier: ICHPlansTuneA04B06AdamWV1
+  parent_checkpoint: checkpoint_final.pth
+  expected_parent_epoch: 188
+  reset_best_metrics: true
+  reset_early_stopping: true
