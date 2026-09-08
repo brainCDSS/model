@@ -87,6 +87,11 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         full_validation = self.ich_config.get("full_validation", {})
         self._full_validation_enabled = bool(full_validation.get("enabled", False))
         self._full_validation_interval = int(full_validation.get("interval", 5))
+        self._full_validation_start_epoch = int(
+            full_validation.get("start_epoch", self._full_validation_interval)
+        )
+        if self._full_validation_interval < 1 or self._full_validation_start_epoch < 1:
+            raise ValueError("full_validation interval/start_epoch must be positive")
         self._archive_every_epoch = bool(full_validation.get("archive_every_epoch", False))
         self._full_validation_top_k = int(full_validation.get("keep_top_k", 3))
         self._full_validation_neighborhood_radius = int(
@@ -186,7 +191,10 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
         if (
             self._full_validation_enabled
             and self.current_epoch > 0
-            and self.current_epoch % self._full_validation_interval == 0
+            and self.current_epoch >= self._full_validation_start_epoch
+            and (
+                self.current_epoch - self._full_validation_start_epoch
+            ) % self._full_validation_interval == 0
             and self.current_epoch not in validated_epochs
         ):
             checkpoint = (
@@ -443,6 +451,13 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
     def _archive_epoch_checkpoint(self, completed_epochs: int) -> Path | None:
         if not self._archive_every_epoch or self.local_rank != 0:
             return None
+        archive_start_epoch = max(
+            1,
+            self._full_validation_start_epoch
+            - self._full_validation_neighborhood_radius,
+        )
+        if completed_epochs < archive_start_epoch:
+            return None
         folder = Path(self.output_folder) / "epoch_checkpoints"
         folder.mkdir(parents=True, exist_ok=True)
         destination = folder / f"checkpoint_epoch_{completed_epochs:04d}.pth"
@@ -494,7 +509,11 @@ class nnUNetTrainerICHBaseline(nnUNetTrainer):
     def _maybe_run_full_validation(self, completed_epochs: int, epoch_checkpoint: Path | None) -> None:
         if not self._full_validation_enabled:
             return
-        if completed_epochs % self._full_validation_interval != 0:
+        if completed_epochs < self._full_validation_start_epoch:
+            return
+        if (
+            completed_epochs - self._full_validation_start_epoch
+        ) % self._full_validation_interval != 0:
             return
         if self.is_ddp:
             raise RuntimeError("periodic full-volume validation currently supports single-GPU training only")

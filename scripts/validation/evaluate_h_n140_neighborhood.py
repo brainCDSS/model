@@ -19,7 +19,7 @@ def positive_macro(summary):
 def main():
  p=argparse.ArgumentParser();p.add_argument("--config",required=True,type=Path);p.add_argument("--data-root",required=True,type=Path);p.add_argument("--results-root",required=True,type=Path);a=p.parse_args()
  config_path=a.config.resolve();c=yaml.safe_load(config_path.read_text());e,q=c["experiment"],c["plans"];configure_paths(a.data_root,a.results_root);set_config_environment(config_path)
- fold=a.results_root.resolve()/f"Dataset{int(e['dataset_id']):03d}_{e['dataset_name']}"/f"nnUNetTrainerICHBaseline__{q['output_identifier']}__{e['configuration']}"/f"fold_{e['fold']}";hp=fold/"full_validation_history.json"
+ fold=a.results_root.resolve()/f"Dataset{int(e['dataset_id']):03d}_{e.get('dataset_name', 'ICHBinary')}"/f"nnUNetTrainerICHBaseline__{q['output_identifier']}__{e['configuration']}"/f"fold_{e['fold']}";hp=fold/"full_validation_history.json"
  if not hp.is_file():raise FileNotFoundError(hp)
  history=json.loads(hp.read_text());k=int(c["full_validation"].get("keep_top_k",3));r=int(c["full_validation"].get("neighborhood_radius",4));anchors=[int(x["epoch"]) for x in sorted(history,key=lambda x:float(x["macro_dice_positive"]),reverse=True)[:k]];epochs=sorted({x for anchor in anchors for x in range(max(1,anchor-r),min(int(c["trainer"]["epochs"]),anchor+r)+1)})
  print(f"H-N140 fold {e['fold']} Top-{k} anchors={anchors}; evaluating {len(epochs)} checkpoints",flush=True)
