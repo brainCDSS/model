@@ -21,3 +21,17 @@ def test_h_n130_builds_case_and_component_sampling():
     assert "tiny" in centers and "large" in centers
     assert case_report["num_train_cases"]==3
     assert component_report["num_components"]==2
+
+
+def test_a_b05_samples_components_uniformly():
+    config = load_config(
+        Path("configs/experiments/aneurysm_binary/A-B05.yaml")
+    )["sampling"]
+    centers, report = build_component_centers(Dataset(), [1, 1, 1], config)
+
+    for _, probabilities in centers.values():
+        np.testing.assert_allclose(
+            probabilities,
+            np.full(len(probabilities), 1 / len(probabilities)),
+        )
+    assert report["strategy"].startswith("foreground patches centered")

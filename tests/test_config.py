@@ -35,6 +35,21 @@ def test_load_hemorrhage_nnunet_configs(
     assert config["plans"]["batch_size"] > 0
     assert config["trainer"]["epochs"] > 0
 
+
+def test_load_a_b05_component_centered_config():
+    path = Path("configs/experiments/aneurysm_binary/A-B05.yaml")
+    config = load_nnunet_config(path)
+
+    assert config["experiment"]["name"] == "A-B05"
+    assert config["plans"]["output_identifier"] == (
+        "AneurysmBinaryPlansTverskyFocalComponentCenteredV1"
+    )
+    assert config["trainer"]["oversample_foreground_percent"] == 0.33
+    assert config["loss"]["name"] == "tversky_focal"
+    assert config["sampling"]["strategy"] == "component_center"
+    assert set(config["sampling"]["component_weights"].values()) == {1.0}
+
+
 @pytest.mark.parametrize(
     ("config_name", "model_name"),
     [

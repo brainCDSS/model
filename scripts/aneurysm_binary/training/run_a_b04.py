@@ -74,11 +74,17 @@ def main() -> int:
         "-device",
         experiment.get("device", "cuda"),
     ] + (["--c"] if resume else [])
+    validation_script = (
+        "evaluate_a_b05_neighborhood.py"
+        if experiment["name"] == "A-B05"
+        else "evaluate_a_b04_neighborhood.py"
+    )
     refine = [
         str(python),
         str(
             repo
-            / "scripts/aneurysm_binary/validation/evaluate_a_b04_neighborhood.py"
+            / "scripts/aneurysm_binary/validation"
+            / validation_script
         ),
         "--config",
         str(config_path),
@@ -90,7 +96,7 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "experiment": "A-B04",
+                "experiment": experiment["name"],
                 "mode": "resume" if resume else "new",
                 "output_folder": str(fold),
                 "prepare": prepare,

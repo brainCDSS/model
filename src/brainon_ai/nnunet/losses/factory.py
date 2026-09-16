@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from scipy.ndimage import label as connected_components
 from torch import nn
 from nnunetv2.training.loss.compound_losses import DC_and_CE_loss
 from nnunetv2.training.loss.deep_supervision import DeepSupervisionWrapper
@@ -84,20 +85,104 @@ class RegionFocalLoss(nn.Module):
         return self.focal_weight*focal-self.region_weight*score.mean()
 
 
+class InstanceCenterLoss(nn.Module):
+    """DiceCE plus equal-per-lesion Dice and center detection supervision."""
+
+    def __init__(self, *, base_loss, instance_weight, center_weight, smooth, center_fraction=0.25):
+        super().__init__()
+        if instance_weight < 0 or center_weight < 0:
+            raise ValueError("instance/center weights must be non-negative")
+        if not 0 < center_fraction <= 1:
+            raise ValueError("center_fraction must be in (0, 1]")
+        self.base_loss = base_loss
+        self.instance_weight = float(instance_weight)
+        self.center_weight = float(center_weight)
+        self.smooth = float(smooth)
+        self.center_fraction = float(center_fraction)
+
+    def _instance_terms(self, probabilities, target):
+        labels = target[:, 0].long()
+        foreground = probabilities[:, 1]
+        instance_scores, center_scores = [], []
+        for batch_index in range(labels.shape[0]):
+            target_np = labels[batch_index].detach().cpu().numpy() > 0
+            components, count = connected_components(
+                target_np, structure=np.ones((3,) * target_np.ndim, dtype=np.uint8)
+            )
+            prediction = foreground[batch_index]
+            for component_id in range(1, count + 1):
+                coordinates_np = np.argwhere(components == component_id)
+                if not len(coordinates_np):
+                    continue
+                coordinates = torch.as_tensor(
+                    coordinates_np.T, device=foreground.device, dtype=torch.long
+                )
+                values = prediction[tuple(coordinates)]
+                intersection = values.sum()
+                instance_scores.append(
+                    (2 * intersection + self.smooth)
+                    / (intersection + len(coordinates_np) + self.smooth)
+                )
+
+                centroid = coordinates_np.mean(axis=0, keepdims=True)
+                squared_distance = ((coordinates_np - centroid) ** 2).sum(axis=1)
+                center_count = max(1, int(np.ceil(len(coordinates_np) * self.center_fraction)))
+                if center_count < len(coordinates_np):
+                    center_indices_np = np.argpartition(
+                        squared_distance, center_count - 1
+                    )[:center_count]
+                    center_indices = torch.as_tensor(
+                        center_indices_np, device=foreground.device, dtype=torch.long
+                    )
+                    center_values = values[center_indices]
+                else:
+                    center_values = values
+                center_scores.append(center_values.mean().clamp_min(1e-6))
+        zero = foreground.sum() * 0
+        instance_loss = 1 - torch.stack(instance_scores).mean() if instance_scores else zero
+        center_loss = -torch.log(torch.stack(center_scores)).mean() if center_scores else zero
+        return instance_loss, center_loss
+
+    def forward(self, net_output, target):
+        base = self.base_loss(net_output, target)
+        instance_loss, center_loss = self._instance_terms(
+            torch.softmax(net_output, dim=1), target
+        )
+        return base + self.instance_weight * instance_loss + self.center_weight * center_loss
+
+
+class InstanceCenterDeepSupervisionWrapper(nn.Module):
+    def __init__(self, loss, weights):
+        super().__init__()
+        self.loss = loss
+        self.weights = [float(value) for value in weights]
+
+    def forward(self, outputs, targets):
+        result = self.weights[0] * self.loss(outputs[0], targets[0])
+        for weight, output, target in zip(self.weights[1:], outputs[1:], targets[1:]):
+            if weight:
+                result = result + weight * self.loss.base_loss(output, target)
+        return result
+
+
 def _deep_supervision(trainer,loss):
     if not trainer.enable_deep_supervision:return loss
     scales=trainer._get_deep_supervision_scales()
     weights=np.asarray([1/(2**i) for i in range(len(scales))],dtype=np.float64)
     weights[-1]=1e-6 if trainer.is_ddp and not trainer._do_i_compile() else 0
     weights/=weights.sum()
+    if isinstance(loss, InstanceCenterLoss):
+        return InstanceCenterDeepSupervisionWrapper(loss, weights)
     return DeepSupervisionWrapper(loss,weights)
 
 
 def build_loss(trainer,config):
     name=str(config.get("name","dice_ce")).lower()
     common={"include_background":bool(config.get("include_background",False)),"batch_dice":bool(trainer.configuration_manager.batch_dice),"ignore_label":trainer.label_manager.ignore_label}
-    if name=="dice_ce":
+    if name in {"dice_ce", "instance_center"}:
         loss=DC_and_CE_loss({"batch_dice":trainer.configuration_manager.batch_dice,"smooth":float(config.get("smooth",1e-5)),"do_bg":common["include_background"],"ddp":trainer.is_ddp},{},weight_ce=float(config.get("ce_weight",1.0)),weight_dice=float(config.get("dice_weight",1.0)),ignore_label=common["ignore_label"],dice_class=MemoryEfficientSoftDiceLoss)
+        if name == "instance_center":
+            loss=InstanceCenterLoss(base_loss=loss,instance_weight=float(config.get("instance_weight",1.0)),center_weight=float(config.get("center_weight",0.25)),center_fraction=float(config.get("center_fraction",0.25)),smooth=float(config.get("smooth",1e-5)))
     elif name=="tversky_ce":
         loss=TverskyCELoss(alpha=float(config.get("alpha",.3)),beta=float(config.get("beta",.7)),smooth=float(config.get("smooth",1e-5)),weight_ce=float(config.get("ce_weight",1.0)),weight_tversky=float(config.get("tversky_weight",1.0)),**common)
     elif name in {"dice_focal","tversky_focal"}:

@@ -1,0 +1,249 @@
+schema_version: '1.0'
+models:
+  H-N00:
+    task: hemorrhage
+    name: H-N00
+    version: validation-best
+    prediction_dir: runs/ensembles/H-E10/probabilities/H-N00
+    label_dir: ../datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_raw/Dataset001_ICHBinary/labelsTr
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/H-N00/axis0_flip
+    tta_transforms:
+    - nnunet_preprocessed_axis0_flip
+    model_folder: runs/nnunet/Dataset001_ICHBinary/nnUNetTrainerICHBaseline__ICHPlansBaselineV1__3d_fullres
+    raw_images: ../datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_raw/Dataset001_ICHBinary/imagesTr
+    split_file: ../datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_preprocessed/Dataset001_ICHBinary/splits_final.json
+    config: configs/experiments/hemorrhage/H-N00.yaml
+    backend: nnunet
+    data_root: ../datasets/hemorrhage/v1/model_ready/nnunet
+    results_root: runs/nnunet
+    checkpoint_name: checkpoint_best_composite.pth
+    model_status: validated_artifact_available
+  H-N30:
+    task: hemorrhage
+    name: H-N30
+    version: validation-best
+    prediction_dir: runs/ensembles/H-E10/probabilities/H-N30
+    label_dir: ../datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_raw/Dataset001_ICHBinary/labelsTr
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/H-N30/axis0_flip
+    tta_transforms:
+    - nnunet_preprocessed_axis0_flip
+    model_folder: runs/nnunet/Dataset001_ICHBinary/nnUNetTrainerICHBaseline__ICHPlansDefaultAttentionV1__3d_fullres
+    raw_images: ../datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_raw/Dataset001_ICHBinary/imagesTr
+    split_file: ../datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_preprocessed/Dataset001_ICHBinary/splits_final.json
+    config: configs/experiments/hemorrhage/H-N30.yaml
+    backend: nnunet
+    data_root: ../datasets/hemorrhage/v1/model_ready/nnunet
+    results_root: runs/nnunet
+    checkpoint_name: checkpoint_best_composite.pth
+    model_status: validated_artifact_available
+  A-B04:
+    task: aneurysm
+    name: A-B04
+    version: validation-best
+    prediction_dir: runs/calibration_inputs/A-B04/original
+    label_dir: ../datasets/aneurysm/v2/model_ready/nnunet/nnUNet_raw/Dataset503_TopAneuMRABinary/labelsTr
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/A-B04/axis0_flip
+    tta_transforms:
+    - nnunet_preprocessed_axis0_flip
+    model_folder: runs/aneurysm_binary/nnunet/Dataset503_TopAneuMRABinary/nnUNetTrainerAneurysmBinaryBaseline__AneurysmBinaryPlansForegroundOversample50TverskyFocalV1__3d_fullres
+    raw_images: ../datasets/aneurysm/v2/model_ready/nnunet/nnUNet_raw/Dataset503_TopAneuMRABinary/imagesTr
+    split_file: ../datasets/aneurysm/v2/model_ready/nnunet/nnUNet_preprocessed/Dataset503_TopAneuMRABinary/splits_final.json
+    config: configs/experiments/aneurysm_binary/A-B04.yaml
+    backend: nnunet
+    data_root: ../datasets/aneurysm/v2/model_ready/nnunet
+    results_root: runs/aneurysm_binary/nnunet
+    checkpoint_name: checkpoint_best_dual_criteria.pth
+    model_status: validated_artifact_available
+  A-B05:
+    task: aneurysm
+    name: A-B05
+    version: validation-best
+    prediction_dir: runs/calibration_inputs/A-B05/original
+    label_dir: ../datasets/aneurysm/v2/model_ready/nnunet/nnUNet_raw/Dataset503_TopAneuMRABinary/labelsTr
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/A-B05/axis0_flip
+    tta_transforms:
+    - nnunet_preprocessed_axis0_flip
+    model_folder: runs/aneurysm_binary/nnunet/Dataset503_TopAneuMRABinary/nnUNetTrainerAneurysmBinaryBaseline__AneurysmBinaryPlansTverskyFocalComponentCenteredV1__3d_fullres
+    raw_images: ../datasets/aneurysm/v2/model_ready/nnunet/nnUNet_raw/Dataset503_TopAneuMRABinary/imagesTr
+    split_file: ../datasets/aneurysm/v2/model_ready/nnunet/nnUNet_preprocessed/Dataset503_TopAneuMRABinary/splits_final.json
+    config: configs/experiments/aneurysm_binary/A-B05.yaml
+    backend: nnunet
+    data_root: ../datasets/aneurysm/v2/model_ready/nnunet
+    results_root: runs/aneurysm_binary/nnunet
+    checkpoint_name: checkpoint_best_dual_criteria.pth
+    model_status: validated_artifact_available
+  I-S40:
+    task: ischemia
+    name: I-S40
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S40/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S40/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S40/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S40.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: validated_artifact_available
+  I-S50:
+    task: ischemia
+    name: I-S50
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S50/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S50/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S50/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S50.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: validated_artifact_available
+  I-S60:
+    task: ischemia
+    name: I-S60
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S60/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S60/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S60/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S60.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: failed_training_collapse
+    calibration_eligible: false
+  I-S70:
+    task: ischemia
+    name: I-S70
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S70/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S70/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S70/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S70.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: validated_artifact_available
+  I-S80:
+    task: ischemia
+    name: I-S80
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S80/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S80/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S80/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S80.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: validated_artifact_available
+  I-S90:
+    task: ischemia
+    name: I-S90
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S90/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S90/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S90/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S90.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: validated_artifact_available
+  I-S100:
+    task: ischemia
+    name: I-S100
+    version: validation-best
+    prediction_dir: runs/I-segresnet/I-S100/final_metrics/val_probabilities
+    label_dir: ../datasets/ischemic/SegResNet/val/labels
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-S100/axis0_flip
+    tta_transforms:
+    - affine_left_right_flip
+    backend: segresnet
+    checkpoint: runs/I-segresnet/I-S100/checkpoints/checkpoint_best_dual_criteria.pth
+    config: configs/experiments/ischemia/I-S100.yaml
+    data_root: ../datasets/ischemic/SegResNet
+    model_status: failed_training_collapse
+    calibration_eligible: false
+  I-N30:
+    task: ischemia
+    name: I-N30
+    version: validation-best
+    prediction_dir: runs/I-nnunet/Dataset502_ISLES2022/nnUNetTrainerIschemiaInstanceCenter__IschemiaPlansResidualEncoderICIV2__3d_fullres/fold_0/best_probability_validation
+    label_dir: ../datasets/ischemic/nnunet/nnUNet_raw/Dataset502_ISLES2022/labelsTr
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-N30/axis0_flip
+    tta_transforms:
+    - nnunet_preprocessed_axis0_flip
+    backend: nnunet
+    model_folder: runs/I-nnunet/Dataset502_ISLES2022/nnUNetTrainerIschemiaInstanceCenter__IschemiaPlansResidualEncoderICIV2__3d_fullres
+    raw_images: ../datasets/ischemic/nnunet/nnUNet_raw/Dataset502_ISLES2022/imagesTr
+    split_file: ../datasets/ischemic/nnunet/nnUNet_preprocessed/Dataset502_ISLES2022/splits_final.json
+    config: configs/experiments/ischemia/I-N30.yaml
+    data_root: ../datasets/ischemic/nnunet
+    results_root: runs/I-nnunet
+    checkpoint_name: checkpoint_best_dual_criteria.pth
+    model_status: validated_artifact_available
+  I-N40:
+    task: ischemia
+    name: I-N40
+    version: validation-best
+    prediction_dir: runs/I-nnunet/Dataset502_ISLES2022/nnUNetTrainerIschemiaComponentSampling__IschemiaPlansResidualEncoderComponentSampling__3d_fullres/fold_0/best_probability_validation
+    label_dir: ../datasets/ischemic/nnunet/nnUNet_raw/Dataset502_ISLES2022/labelsTr
+    threshold: 0.5
+    connectivity: 26
+    tta_prediction_dirs:
+    - runs/calibration_tta/I-N40/axis0_flip
+    tta_transforms:
+    - nnunet_preprocessed_axis0_flip
+    backend: nnunet
+    model_folder: runs/I-nnunet/Dataset502_ISLES2022/nnUNetTrainerIschemiaComponentSampling__IschemiaPlansResidualEncoderComponentSampling__3d_fullres
+    raw_images: ../datasets/ischemic/nnunet/nnUNet_raw/Dataset502_ISLES2022/imagesTr
+    split_file: ../datasets/ischemic/nnunet/nnUNet_preprocessed/Dataset502_ISLES2022/splits_final.json
+    config: configs/experiments/ischemia/I-N40.yaml
+    data_root: ../datasets/ischemic/nnunet
+    results_root: runs/I-nnunet
+    checkpoint_name: checkpoint_best_dual_criteria.pth
+    model_status: validated_artifact_available

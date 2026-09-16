@@ -74,7 +74,8 @@ def main() -> int:
         }
     )
     print(
-        f"A-B04 Top-{keep_top_k} anchors={anchors}; neighborhood={epochs}",
+        f"{experiment['name']} Top-{keep_top_k} anchors={anchors}; "
+        f"neighborhood={epochs}",
         flush=True,
     )
 

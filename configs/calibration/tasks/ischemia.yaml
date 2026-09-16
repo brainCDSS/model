@@ -1,0 +1,7 @@
+task: ischemia
+status: provisional_requires_clinical_approval
+rationale: Temporary engineering defaults; small multifocal lesion detection is emphasized.
+dice_min: 0.5
+lesion_recall_min: 0.6
+fp_components_max: 2
+negative_fp_components_max: 0
