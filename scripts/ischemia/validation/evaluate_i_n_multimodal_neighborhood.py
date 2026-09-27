@@ -207,7 +207,20 @@ def main() -> int:
         fold / "full_validation" / f"epoch_{int(best['epoch']):04d}",
         final_metrics_dir,
         float(config.get("evaluation", {}).get("surface_dice_tolerance_mm", 2.0)),
+        config.get("evaluation", {}).get("lesion_size_bins_ml"),
+        config.get("evaluation", {}).get("lesion_size_labels"),
     )
+    # Keep the selected model's lesion-level table alongside final metrics.
+    # This is deliberately separate from patient total-volume summaries.
+    selected_lesions = fold / "lesion_analysis" / f"epoch_{int(best['epoch']):04d}" / "lesion_size_metrics.csv"
+    if selected_lesions.is_file():
+        shutil.copy2(selected_lesions, final_metrics_dir / "lesion_size_metrics.csv")
+        summarize_lesion_sizes(
+            selected_lesions,
+            final_metrics_dir / "lesion_size_summary.csv",
+            config["evaluation"]["lesion_size_bins_ml"],
+            config["evaluation"]["lesion_size_labels"],
+        )
 
     probability_config = config.get("probability_evaluation", {})
     if probability_config.get("enabled", False):

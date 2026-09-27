@@ -66,7 +66,60 @@ def summarize_lesion_sizes(
     return summary
 
 
-def generate_report(summary_path: Path, prediction_dir: Path, output_dir: Path, tolerance_mm=2.0):
+def _write_summary_tables(rows: list[dict], output_dir: Path, bins_ml: list[float], labels: list[str]) -> dict:
+    """Write SegResNet-comparable case, size-group and negative-case summaries."""
+    frame = pd.DataFrame(rows)
+    numeric_rows = []
+    for column in frame.select_dtypes(include=[np.number]).columns:
+        values = frame[column].replace([np.inf, -np.inf], np.nan).dropna().to_numpy(dtype=float)
+        if not len(values):
+            continue
+        numeric_rows.append({
+            "metric": column, "n_valid": int(len(values)), "mean": float(values.mean()),
+            "std": float(values.std(ddof=1)) if len(values) > 1 else 0.0,
+            "median": float(np.median(values)), "q1": float(np.quantile(values, .25)),
+            "q3": float(np.quantile(values, .75)), "min": float(values.min()), "max": float(values.max()),
+        })
+    pd.DataFrame(numeric_rows).to_csv(output_dir / "summary_metrics.csv", index=False)
+
+    positive = frame[frame["gt_lesion_count"] > 0].copy()
+    if not positive.empty:
+        positive["size_group"] = pd.cut(
+            positive["gt_volume_ml"], bins=[-np.inf, *bins_ml, np.inf],
+            labels=labels, right=False,
+        )
+        size_rows = []
+        for group in labels:
+            group_cases = positive[positive["size_group"] == group]
+            total_gt = int(group_cases["gt_lesion_count"].sum())
+            detected = int(group_cases["detected_gt_lesions"].sum())
+            size_rows.append({
+                "size_group": group, "n_cases": int(len(group_cases)),
+                "median_gt_volume_ml": float(group_cases["gt_volume_ml"].median()) if len(group_cases) else None,
+                "macro_dice": float(group_cases["dice"].mean()) if len(group_cases) else None,
+                "macro_iou": float(group_cases["iou"].mean()) if len(group_cases) else None,
+                "macro_precision": float(group_cases["precision"].mean()) if len(group_cases) else None,
+                "macro_recall_sensitivity": float(group_cases["recall_sensitivity"].mean()) if len(group_cases) else None,
+                "macro_hd95_mm": float(group_cases["hd95_mm"].mean()) if len(group_cases) else None,
+                "macro_assd_mm": float(group_cases["assd_mm"].mean()) if len(group_cases) else None,
+                "gt_lesions": total_gt, "detected_lesions": detected,
+                "lesion_detection_rate": detected / total_gt if total_gt else None,
+                "fp_per_scan": float(group_cases["false_positive_lesions"].mean()) if len(group_cases) else None,
+            })
+        pd.DataFrame(size_rows).to_csv(output_dir / "case_volume_summary.csv", index=False)
+
+    negative = frame[frame["gt_lesion_count"] == 0].copy()
+    if negative.empty:
+        negative = pd.DataFrame(columns=["case_id", "pred_lesion_count", "false_positive_lesions"])
+    negative["negative_case_fp"] = negative.get("pred_lesion_count", pd.Series(dtype=float)) > 0
+    negative.to_csv(output_dir / "negative_case_fp.csv", index=False)
+    return {"positive_cases": int(len(positive)), "negative_cases": int(len(negative))}
+
+
+def generate_report(
+    summary_path: Path, prediction_dir: Path, output_dir: Path, tolerance_mm=2.0,
+    lesion_size_bins_ml: list[float] | None = None, lesion_size_labels: list[str] | None = None,
+):
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     rows = []
     for item in summary["metric_per_case"]:
@@ -89,6 +142,9 @@ def generate_report(summary_path: Path, prediction_dir: Path, output_dir: Path, 
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    bins = lesion_size_bins_ml or [1.0, 5.0, 20.0]
+    labels = lesion_size_labels or ["<1 mL", "1–5 mL", "5–20 mL", "≥20 mL"]
+    cohort = _write_summary_tables(rows, output_dir, bins, labels)
 
     numeric = {}
     for key in rows[0]:
@@ -113,6 +169,7 @@ def generate_report(summary_path: Path, prediction_dir: Path, output_dir: Path, 
         "micro_lesion_precision": total_matched / total_pred if total_pred else None,
         "fp_per_scan": sum(row["false_positive_lesions"] for row in rows) / len(rows),
         "complete_miss_cases": sum(row["gt_lesion_count"] > 0 and row["detected_gt_lesions"] == 0 for row in rows),
+        **cohort,
         "note": "Hard-mask metrics. PR-AUC/calibration require saved probability maps.",
     }
     (output_dir / "summary.json").write_text(

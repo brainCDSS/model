@@ -10,7 +10,7 @@ def completed(repo: Path, config: Path) -> bool:
     import yaml
     c=yaml.safe_load(config.read_text(encoding="utf-8")); e,p=c["experiment"],c["plans"]
     fold=Path(c["paths"]["results_root"])/f"Dataset{int(e['dataset_id']):03d}_{e['dataset_name']}"/f"nnUNetTrainerIschemiaMultimodal__{p['output_identifier']}__{e['configuration']}"/f"fold_{e['fold']}"
-    return (fold/"final_selection.json").is_file() and (fold/"best_probability_validation").is_dir()
+    return ((fold/"final_selection.json").is_file() and (fold/"best_probability_validation").is_dir() and (fold/"final_metrics/threshold_summary.json").is_file())
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--dry-run",action="store_true"); ap.add_argument("--rerun-completed",action="store_true"); a=ap.parse_args()

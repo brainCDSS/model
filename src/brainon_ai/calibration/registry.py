@@ -18,7 +18,18 @@ def resolve_model(model_id:str, path:str|Path, repo:Path)->dict:
     m["tta_prediction_dirs"]=[str((repo/Path(x)).resolve()) if not Path(x).is_absolute() else x for x in m.get("tta_prediction_dirs",[])]
     checkpoint = Path(m["checkpoint"]) if m.get("checkpoint") else (Path(m["model_folder"]) / "fold_0" / m.get("checkpoint_name", "")) if m.get("model_folder") else None
     base_version = str(m.get("version", "unversioned"))
-    if checkpoint is not None and checkpoint.is_file():
+    component_paths = [Path(x) if Path(x).is_absolute() else (repo / x).resolve() for x in m.get("component_checkpoints", [])]
+    if component_paths:
+        missing = [str(x) for x in component_paths if not x.is_file()]
+        if missing:
+            m["checkpoint_sha256"] = None
+            m["checkpoint_resolved"] = [str(x) for x in component_paths]
+        else:
+            digest = hashlib.sha256("".join(hashlib.sha256(x.read_bytes()).hexdigest() for x in component_paths).encode()).hexdigest()
+            m["checkpoint_sha256"] = digest
+            m["checkpoint_resolved"] = [str(x) for x in component_paths]
+            m["version"] = f"{base_version}-{digest[:12]}"
+    elif checkpoint is not None and checkpoint.is_file():
         digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
         m["checkpoint_sha256"] = digest
         m["checkpoint_resolved"] = str(checkpoint)

@@ -1,0 +1,9 @@
+version: "1.0.0"
+task: hemorrhage
+status: provisional_requires_clinical_approval
+rationale: "Engineering candidate only; clinical approval required before production use."
+positive_case_rules:
+  dice_min: 0.50
+  lesion_recall_min: 0.80
+negative_case_rules:
+  fp_components_max: 0

@@ -11,7 +11,7 @@ data:
   - 80
   batch_size: 1
   patches_per_volume: 2
-  num_workers: 2
+  num_workers: 0
 preprocessing:
   spacing:
   - 2.0

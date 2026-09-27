@@ -1,0 +1,9 @@
+version: "1.0.0"
+task: aneurysm
+status: provisional_requires_clinical_approval
+rationale: "Engineering candidate only; lesion detection and false-positive control require clinical approval."
+positive_case_rules:
+  lesion_recall_min: 0.80
+  fp_components_max: 2
+negative_case_rules:
+  fp_components_max: 0
