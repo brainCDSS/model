@@ -1,0 +1,11 @@
+{
+  "prediction_score": {
+    "version": "1.0.0",
+    "type": "segmentation_reliability",
+    "method": "logistic_regression",
+    "model_file": "score_model.json",
+    "feature_schema_file": "score_feature_schema.json",
+    "target": "acceptable_segmentation",
+    "checkpoint_binding": "segmentation_model.checkpoint_sha256"
+  }
+}

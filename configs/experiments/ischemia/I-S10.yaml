@@ -1,3 +1,38 @@
-extends: I-S00.yaml
+task: ischemia
 experiment_id: I-S10
-model: {name: dual_encoder}
+
+data:
+  modalities:
+    - DWI
+    - ADC
+  in_channels: 2
+  patch_size:
+    - 80
+    - 96
+    - 80
+  batch_size: 1
+  patches_per_volume: 2
+  num_workers: 2
+
+model:
+  name: segresnet_attention_gate
+  init_filters: 16
+  out_channels: 1
+
+training:
+  epochs: 300
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  early_stopping:
+    enabled: true
+    patience: 30
+    min_delta: 0.001
+
+runtime:
+  seed: 42
+  amp: true
+
+evaluation:
+  threshold: 0.5
+  sw_batch_size: 2
+  overlap: 0.25

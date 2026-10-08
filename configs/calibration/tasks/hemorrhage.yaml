@@ -1,0 +1,8 @@
+task: hemorrhage
+status: provisional_requires_clinical_approval
+rationale: Temporary engineering defaults; lesion detection and false-positive control
+  are required in addition to overlap.
+dice_min: 0.5
+lesion_recall_min: 0.8
+fp_components_max: 2
+negative_fp_components_max: 0

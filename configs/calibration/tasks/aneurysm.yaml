@@ -1,0 +1,7 @@
+task: aneurysm
+status: provisional_requires_clinical_approval
+rationale: Temporary engineering defaults for small aneurysms; must be approved clinically.
+dice_min: 0.3
+lesion_recall_min: 0.8
+fp_components_max: 2
+negative_fp_components_max: 0

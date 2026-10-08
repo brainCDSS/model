@@ -1,0 +1,15 @@
+baseline:
+  experiment: H-T00
+  source: configs/experiments/hemorrhage/H-N80.yaml
+trials:
+  - {experiment: H-T01, alpha: 0.4, beta: 0.6, optimizer: sgd, learning_rate: 0.01, tversky_ce: "1:1"}
+  - {experiment: H-T02, alpha: 0.2, beta: 0.8, optimizer: sgd, learning_rate: 0.01, tversky_ce: "1:1"}
+  - {experiment: H-T03, alpha: 0.4, beta: 0.6, optimizer: adamw, learning_rate: 0.001, tversky_ce: "1:1"}
+  - {experiment: H-T04, alpha: 0.2, beta: 0.8, optimizer: adamw, learning_rate: 0.001, tversky_ce: "1:1"}
+  - {experiment: H-T05, alpha: 0.4, beta: 0.6, optimizer: sgd, learning_rate: 0.005, tversky_ce: "1:1"}
+  - {experiment: H-T06, alpha: 0.4, beta: 0.6, optimizer: sgd, learning_rate: 0.02, tversky_ce: "1:1"}
+  - {experiment: H-T07, alpha: 0.2, beta: 0.8, optimizer: sgd, learning_rate: 0.005, tversky_ce: "1:1"}
+  - {experiment: H-T08, alpha: 0.2, beta: 0.8, optimizer: sgd, learning_rate: 0.02, tversky_ce: "1:1"}
+selection:
+  primary: positive_macro_dice
+  constraints: {positive_detection_rate_min: 0.942857, under5_detection_rate_min: 0.818182}

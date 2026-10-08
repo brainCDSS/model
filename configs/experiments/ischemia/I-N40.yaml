@@ -1,0 +1,77 @@
+experiment:
+  name: I-N40
+  dataset_id: 502
+  dataset_name: ISLES2022
+  configuration: 3d_fullres
+  fold: 0
+  device: cuda
+  continue_training: false
+  validation_checkpoint: best_dual_criteria
+plans:
+  base_identifier: nnUNetPlans
+  output_identifier: IschemiaPlansResidualEncoderComponentSampling
+  patch_size: [80, 96, 80]
+  batch_size: 6
+trainer:
+  epochs: 300
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  save_every: 1
+  learning_rate: 0.01
+  weight_decay: 0.00003
+  oversample_foreground_percent: 0.33
+  optimizer: {name: sgd, momentum: 0.99, nesterov: true}
+  scheduler: {name: poly}
+loss:
+  name: dice_ce
+  include_background: false
+  dice_weight: 1.0
+  ce_weight: 1.0
+  smooth: 0.00001
+checkpoint: {dice_weight: 0.5, recall_weight: 0.5, min_delta: 0.0001}
+pruning: {enabled: false, monitor: composite, min_epochs: 300, patience: 300, min_delta: 0.001}
+network: {name: resenc_m}
+sampling:
+  enabled: true
+  strategy: component_center
+  volume_thresholds_ml: [0.01, 0.05, 0.1]
+  component_weights:
+    lt_1ml: 8.0
+    1_to_5ml: 4.0
+    5_to_20ml: 2.0
+    ge_20ml: 1.0
+full_validation:
+  enabled: true
+  start_epoch: 150
+  interval: 10
+  archive_every_epoch: true
+  keep_top_k: 3
+  neighborhood_radius: 5
+final_selection:
+  lesion_candidates: 3
+  macro_dice_tolerance: 0.01
+probability_evaluation:
+  enabled: true
+  thresholds: [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90]
+  small_lesion_max_ml: 0.1
+  recommended_max_fp_per_scan: 1.5
+evaluation:
+  surface_dice_tolerance_mm: 2.0
+  lesion_connectivity: 26
+  lesion_size_bins_ml: [0.01, 0.05, 0.1, 0.5]
+  lesion_size_labels: ["<0.01 mL", "0.01-0.05 mL", "0.05-0.1 mL", "0.1-0.5 mL", ">=0.5 mL"]
+  report:
+    - macro_dice
+    - lesion_precision
+    - lesion_recall
+    - lesion_f1
+    - fp_per_scan
+    - small_lesion_detection_rate
+    - hd95_mm
+    - assd_mm
+    - nsd_2mm
+    - absolute_volume_difference_ml
+    - relative_volume_difference_percent
+paths:
+  data_root: /home/stu03/workspace/datasets/ischemic/nnunet
+  results_root: /home/stu03/workspace/model/runs/I-nnunet

@@ -1,0 +1,15 @@
+task: aneurysm
+release_id: topaneu2026_mra_v2.0.0
+source_dataset: /home/stu03/workspace/datasets/aneurysm/nnU-Net/nnUNet_raw/Dataset501_TopAneuMRA_Location
+output_root: /home/stu03/workspace/datasets/aneurysm/v2/model_ready/nnunet
+dataset_id: 503
+dataset_name: Dataset503_TopAneuMRABinary
+image_strategy: hardlink
+binary_rule: source_label > 0
+affine_tolerance: 0.0001
+expected:
+  training: 261
+  test: 46
+labels:
+  background: 0
+  aneurysm: 1

@@ -1,0 +1,72 @@
+{
+  "experiment_id": "A-N00R1",
+  "created_at": "2026-09-03T06:37:04",
+  "dataset": "Dataset501_TopAneuMRA_Location",
+  "trainer": "nnUNetTrainerAneurysmSparse53Retrain",
+  "configuration": "3d_fullres",
+  "fold": 0,
+  "training_policy": {
+    "architecture": "Standard PlainConvUNet",
+    "outputs": 53,
+    "train_cases": 215,
+    "validation_cases": 46,
+    "max_epochs": 300,
+    "train_iterations_per_epoch": 250,
+    "online_validation_iterations_per_epoch": 50,
+    "loss": "GT-present-only Dice + CE",
+    "foreground_sampling": 0.75,
+    "early_stopping_start_epoch": 80,
+    "patience": 40,
+    "min_delta": 0.0001,
+    "best_monitor": "ema_fg_dice"
+  },
+  "checkpoint_status": {
+    "latest": true,
+    "best": true,
+    "final": false
+  },
+  "final_validation_complete": false,
+  "copied_result_artifacts": [
+    {
+      "source": "A_N00R1_console.log",
+      "repository": "results/aneurysm/A-N00R1/A_N00R1_console.log",
+      "bytes": 35731
+    },
+    {
+      "source": "Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/dataset.json",
+      "repository": "results/aneurysm/A-N00R1/Dataset501_TopAneuMRA_Location__nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres__dataset.json",
+      "bytes": 2002
+    },
+    {
+      "source": "Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/dataset_fingerprint.json",
+      "repository": "results/aneurysm/A-N00R1/Dataset501_TopAneuMRA_Location__nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres__dataset_fingerprint.json",
+      "bytes": 50987
+    },
+    {
+      "source": "Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/plans.json",
+      "repository": "results/aneurysm/A-N00R1/Dataset501_TopAneuMRA_Location__nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres__plans.json",
+      "bytes": 16112
+    },
+    {
+      "source": "Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/fold_0/debug.json",
+      "repository": "results/aneurysm/A-N00R1/Dataset501_TopAneuMRA_Location__nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres__fold_0__debug.json",
+      "bytes": 21121
+    },
+    {
+      "source": "Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/fold_0/patient_validation/training_history.csv",
+      "repository": "results/aneurysm/A-N00R1/Dataset501_TopAneuMRA_Location__nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres__fold_0__patient_validation__training_history.csv",
+      "bytes": 1503
+    },
+    {
+      "source": "Dataset501_TopAneuMRA_Location/nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres/fold_0/training_log_2026_9_2_19_02_40.txt",
+      "repository": "results/aneurysm/A-N00R1/Dataset501_TopAneuMRA_Location__nnUNetTrainerAneurysmSparse53Retrain__nnUNetPlans__3d_fullres__fold_0__training_log_2026_9_2_19_02_40.txt",
+      "bytes": 10932
+    }
+  ],
+  "excluded_from_git": [
+    "checkpoint *.pth",
+    "Dataset501 actual data",
+    "nnUNet preprocessed data",
+    "prediction volumes"
+  ]
+}

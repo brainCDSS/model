@@ -1,0 +1,14 @@
+experiment_id: H-E10
+task: hemorrhage
+framework: ensemble
+architecture: probability_soft_voting
+data:
+  modalities: [CT]
+  in_channels: 1
+ensemble:
+  weights: {H-N00: 0.5, H-N30: 0.5}
+  threshold: 0.7
+  summary: runs/ensembles/H-E10/best_setting.json
+  components:
+    H-N00: runs/nnunet/Dataset001_ICHBinary/nnUNetTrainerICHBaseline__ICHPlansBaselineV1__3d_fullres/fold_0/checkpoint_best_composite.pth
+    H-N30: runs/nnunet/Dataset001_ICHBinary/nnUNetTrainerICHBaseline__ICHPlansDefaultAttentionV1__3d_fullres/fold_0/checkpoint_best_composite.pth

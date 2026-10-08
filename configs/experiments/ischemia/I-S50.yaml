@@ -1,0 +1,85 @@
+task: ischemia
+experiment_id: I-S50
+data:
+  modalities:
+  - DWI
+  - ADC
+  in_channels: 2
+  patch_size:
+  - 80
+  - 96
+  - 80
+  batch_size: 1
+  patches_per_volume: 2
+  num_workers: 2
+preprocessing:
+  spacing:
+  - 2.0
+  - 2.0
+  - 2.0
+  normalization:
+  - ZScore
+  - ZScore
+model:
+  name: segresnet_ds
+  init_filters: 16
+  out_channels: 1
+  deep_supervision_depth: 3
+loss:
+  name: dice_ce
+  deep_supervision_weights:
+  - 1.0
+  - 0.5
+  - 0.25
+training:
+  epochs: 300
+  learning_rate: 0.001
+  weight_decay: 1.0e-05
+  early_stopping:
+    enabled: false
+    patience: 300
+    min_delta: 0.001
+full_validation:
+  enabled: true
+  start_epoch: 10
+  interval: 10
+  keep_top_k: 3
+  neighborhood_radius: 5
+final_selection:
+  lesion_candidates: 3
+  macro_dice_tolerance: 0.01
+runtime:
+  seed: 42
+  amp: true
+evaluation:
+  threshold: 0.5
+  sw_batch_size: 2
+  overlap: 0.25
+probability_evaluation:
+  enabled: true
+  thresholds:
+  - 0.1
+  - 0.15
+  - 0.2
+  - 0.25
+  - 0.3
+  - 0.35
+  - 0.4
+  - 0.45
+  - 0.5
+  - 0.55
+  - 0.6
+  - 0.65
+  - 0.7
+  - 0.75
+  - 0.8
+  - 0.85
+  - 0.9
+  recommended_max_fp_per_scan: 1.5
+paths:
+  data_root: /home/stu03/workspace/datasets/ischemic/SegResNet
+  results_root: /home/stu03/workspace/model/runs/I-segresnet
+sampling:
+  strategy: balanced
+  positive: 1
+  negative: 1

@@ -1,0 +1,57 @@
+experiment:
+  name: H-N30-nnunet-default-attention
+  dataset_id: 1
+  dataset_name: ICHBinary
+  configuration: 3d_fullres
+  fold: 0
+  device: auto
+  continue_training: false
+  validation_checkpoint: best_composite
+
+plans:
+  base_identifier: nnUNetPlans
+  output_identifier: ICHPlansDefaultAttentionV1
+
+  # H-N00과 동일하게 유지
+  patch_size: [20, 320, 256]
+  batch_size: 1
+
+trainer:
+  # H-N00과 동일하게 유지
+  epochs: 300
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  save_every: 10
+  learning_rate: 0.01
+  weight_decay: 0.00003
+  oversample_foreground_percent: 0.33
+
+  optimizer:
+    name: sgd
+    momentum: 0.99
+    nesterov: true
+
+  scheduler:
+    name: poly
+
+loss:
+  name: dice_ce
+  include_background: false
+  dice_weight: 1.0
+  ce_weight: 1.0
+  smooth: 0.00001
+
+checkpoint:
+  dice_weight: 0.5
+  recall_weight: 0.5
+  min_delta: 0.0001
+
+pruning:
+  enabled: true
+  monitor: composite
+  min_epochs: 200
+  patience: 30
+  min_delta: 0.001
+
+network:
+  name: default_attention

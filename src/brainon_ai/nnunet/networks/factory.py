@@ -15,7 +15,15 @@ def build_network(
 ):
     """Network registry for the baseline and hemorrhage ablations."""
     name = str(config.get("name", "default")).lower()
-    if name in {"default", "resenc_m", "resenc_m_attention"}:
+
+    supported = {
+        "default",
+        "default_attention",
+        "resenc_m",
+        "resenc_m_attention",
+    }
+
+    if name in supported:
         network = nnUNetTrainer.build_network_architecture(
             plans_manager,
             configuration_manager,
@@ -23,12 +31,18 @@ def build_network(
             num_output_channels,
             enable_deep_supervision,
         )
-        if name == "resenc_m_attention":
+
+        if name in {"default_attention", "resenc_m_attention"}:
             if not hasattr(network, "decoder"):
-                raise TypeError("Attention Gate를 적용할 nnU-Net decoder가 없습니다.")
+                raise TypeError(
+                    "Attention Gate를 적용할 nnU-Net decoder가 없습니다."
+                )
+
             network.decoder = AttentionUNetDecoder(network.decoder)
+
             if hasattr(network, "initialize"):
                 network.decoder.attention_gates.apply(network.initialize)
+
         return network
     raise ValueError(
         f"지원하지 않는 network: {name}. "

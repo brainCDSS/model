@@ -1,4 +1,53 @@
-extends: I-S00-smoke.yaml
+task: ischemia
 experiment_id: I-N00
-model: {name: nnunet, in_channels: 2, features: 16}
-training: {epochs: 300}
+
+data:
+  dataset_id: 502
+  dataset_name: Dataset502_ISLES2022
+  modalities:
+    - DWI
+    - ADC
+  in_channels: 2
+
+split:
+  fold: 0
+  train_cases: 175
+  validation_cases: 38
+  test_cases: 37
+
+model:
+  name: nnunet
+  trainer: nnUNetTrainerIschemiaBaseline
+  configuration: 3d_fullres
+  plans: nnUNetPlans
+
+preprocessing:
+  spacing:
+    - 2.0
+    - 2.0
+    - 2.0
+  patch_size:
+    - 80
+    - 96
+    - 80
+  batch_size: 6
+  normalization:
+    - ZScore
+    - ZScore
+
+training:
+  epochs: 300
+  device: cuda
+  early_stopping:
+    enabled: true
+    monitor: val_dice
+    mode: max
+    patience: 30
+    min_delta: 0.001
+
+checkpoint:
+  save_best: true
+  save_latest_every: 1
+  monitor: val_dice
+  mode: max
+  resume: true

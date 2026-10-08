@@ -1,0 +1,44 @@
+{
+  "bundle_root": "/home/stu03/workspace/model/external/NV-Segment-CTMR/NV-Segment-CT",
+  "ckpt_dir": "/home/stu03/workspace/model/runs/H-FM10/bundle/models",
+  "output_dir": "/home/stu03/workspace/model/runs/H-FM10/bundle/eval",
+  "mlflow_dir": "/home/stu03/workspace/model/runs/H-FM10/bundle/mlruns",
+  "data_list_file_path": "/home/stu03/workspace/model/runs/H-FM10/data/datalist_fold0.json",
+  "dataset_dir": "/",
+  "finetune_model_path": "/home/stu03/workspace/model/external/NV-Segment-CTMR/NV-Segment-CT/models/model.pt",
+  "label_mappings": {
+    "default": [
+      [
+        1,
+        22
+      ]
+    ]
+  },
+  "epochs": 150,
+  "val_interval": 1,
+  "val_at_start": true,
+  "learning_rate": 0.0001,
+  "patch_size": [
+    128,
+    128,
+    96
+  ],
+  "patch_size_valid": [
+    128,
+    128,
+    96
+  ],
+  "resample_to_spacing": [
+    1.5,
+    1.5,
+    1.5
+  ],
+  "train_dataset_cache_rate": 0.0,
+  "val_dataset_cache_rate": 0.0,
+  "num_cache_workers": 2,
+  "show_cache_progress": false,
+  "use_mlflow": false,
+  "train#dataloader#num_workers": 0,
+  "train#dataloader#persistent_workers": false,
+  "validate#dataloader#num_workers": 0
+}

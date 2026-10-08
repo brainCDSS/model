@@ -1,0 +1,52 @@
+experiment:
+  name: A-B04
+  dataset_id: 503
+  dataset_name: TopAneuMRABinary
+  configuration: 3d_fullres
+  fold: 0
+  device: cuda
+  continue_training: false
+  validation_checkpoint: best_dual_criteria
+plans:
+  base_identifier: nnUNetPlans
+  output_identifier: AneurysmBinaryPlansTverskyFocalV1
+  patch_size: [80, 192, 160]
+  batch_size: 2
+trainer:
+  epochs: 300
+  iterations_per_epoch: 250
+  validation_iterations_per_epoch: 50
+  save_every: 1
+  learning_rate: 0.01
+  weight_decay: 0.00003
+  oversample_foreground_percent: 0.33
+  optimizer: {name: sgd, momentum: 0.99, nesterov: true}
+  scheduler: {name: poly}
+loss:
+  name: tversky_focal
+  include_background: false
+  tversky_weight: 1.0
+  focal_weight: 1.0
+  tversky_alpha: 0.3
+  tversky_beta: 0.7
+  gamma: 2.0
+  foreground_alpha: 0.75
+  background_alpha: 0.25
+  smooth: 0.00001
+checkpoint: {dice_weight: 0.5, recall_weight: 0.5, min_delta: 0.0001}
+pruning: {enabled: false, monitor: composite, min_epochs: 150, patience: 30, min_delta: 0.001}
+network: {name: default}
+sampling: {enabled: false}
+full_validation:
+  enabled: true
+  start_epoch: 200
+  interval: 10
+  archive_every_epoch: true
+  keep_top_k: 3
+  neighborhood_radius: 5
+final_selection:
+  lesion_candidates: 3
+  macro_dice_tolerance: 0.01
+paths:
+  data_root: /home/stu03/workspace/datasets/aneurysm/v2/model_ready/nnunet
+  results_root: /home/stu03/workspace/model/runs/aneurysm_binary/nnunet

@@ -1,12 +1,15 @@
 experiment:
-  name: H-S00-segresnet-baseline
+  name: segresnet_baseline
   seed: 20260826
+  # auto: CUDA가 있으면 GPU, 없으면 CPU를 사용합니다.
   device: auto
-  output_dir: runs/segresnet/H-S00
-  manifest_path: C:/Datasets/hemorrhage/v1/metadata/common/06_preprocessing_manifest.csv
+  output_dir: segresnet/runs/segresnet_baseline
+  manifest_path: ../데이터품질검증 및 통합/results/06_preprocessing_manifest.csv
 
 data:
-  root_dir: C:/Datasets/hemorrhage/v1/model_ready/segresnet
+  # 다른 PC/서버에서는 integrated_binary_v1 경로를 지정하세요.
+  # null이면 manifest에 기록된 현재 PC의 절대경로를 사용합니다.
+  root_dir: null
   # MONAI spatial order is [x, y, z].
   patch_size: [160, 160, 32]
   batch_size: 1
@@ -47,7 +50,6 @@ training:
   amp: true
   validation_interval: 2
   gradient_clip_norm: 12.0
-  # null: new run, auto: resume from runs/segresnet/H-S00/checkpoints/last.pt
   resume: null
 
 inference:
@@ -66,6 +68,6 @@ pruning:
   enabled: true
   monitor: composite
   min_epochs: 50
-  # Patience is counted in validation checks. interval=2, so 30 checks = 60 epochs.
+  # patience is counted in validation checks, not training epochs.
   patience: 30
   min_delta: 0.001

@@ -51,6 +51,33 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         raise ValueError("plans.batch_size는 양수여야 합니다.")
     if int(config["trainer"].get("epochs", 0)) <= 0:
         raise ValueError("trainer.epochs는 양수여야 합니다.")
+    sampling = config.get("sampling", {})
+    if sampling.get("enabled", False):
+        thresholds = sampling.get("volume_thresholds_ml")
+        if not isinstance(thresholds, list) or len(thresholds) != 3:
+            raise ValueError("sampling volume thresholds must contain three values")
+        thresholds = [float(value) for value in thresholds]
+        if thresholds != sorted(thresholds) or thresholds[0] <= 0:
+            raise ValueError("sampling volume thresholds must be positive and sorted")
+        strategy = str(sampling.get("strategy", "case_weighted")).lower()
+        component_required = {"lt_1ml", "1_to_5ml", "5_to_20ml", "ge_20ml"}
+        case_required = {"negative", *component_required}
+        if strategy == "component_center":
+            groups = [(component_required, sampling.get("component_weights", {}))]
+        elif strategy == "case_weighted":
+            groups = [(case_required, sampling.get("weights", {}))]
+        elif strategy == "case_and_component":
+            groups = [
+                (case_required, sampling.get("weights", {})),
+                (component_required, sampling.get("component_weights", {})),
+            ]
+        else:
+            raise ValueError(f"unsupported sampling.strategy: {strategy}")
+        for required, weights in groups:
+            if not required.issubset(weights):
+                raise ValueError("sampling weights are incomplete")
+            if any(float(weights[name]) <= 0 for name in required):
+                raise ValueError("sampling weights must be positive")
     config["_config_path"] = str(candidate)
     return config
 

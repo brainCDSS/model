@@ -1,0 +1,15 @@
+experiment_id: I-E03
+task: ischemia
+framework: ensemble
+architecture: probability_soft_voting
+data:
+  modalities: [DWI, ADC]
+  in_channels: 2
+ensemble:
+  weights: {I-N120: 0.6, I-S101: 0.2, I-S50: 0.2}
+  threshold: 0.2
+  summary: runs/ischemia_ensemble/I-E03_N120_S50_S101/N120_060_S101_020_S50_020/ensemble_summary.json
+  components:
+    I-N120: runs/I-nnunet/Dataset502_ISLES2022/nnUNetTrainerIschemiaMultimodal__IschemiaPlansDualEncoderGatedV1__3d_fullres/fold_0/checkpoint_best_dual_criteria.pth
+    I-S101: runs/I-segresnet/I-S101/checkpoints/checkpoint_best_dual_criteria.pth
+    I-S50: runs/I-segresnet/I-S50/checkpoints/checkpoint_best_dual_criteria.pth

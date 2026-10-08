@@ -1,0 +1,30 @@
+experiment:
+  name: H-FM10
+  family: NV-Segment-CT
+  task: CT intracranial hemorrhage binary segmentation
+  split: Dataset001_ICHBinary fold 0 (train=186, val=40)
+pretrained:
+  repository: NVIDIA-Medtech/NV-Segment-CTMR
+  bundle: NV-Segment-CT
+  checkpoint_huggingface_repo: nvidia/NV-Segment-CT
+  checkpoint_source: vista3d_pretrained_model/model.pt
+  checkpoint: models/model.pt
+  initialization: "fixed-channel softmax; dataset label 1 initialized from VISTA brain class ID 22"
+  caveat: "Brain class is used only as an anatomical initialization. ICH is not an NV-Segment-CT pretrained class."
+data:
+  nnunet_raw: /home/stu03/workspace/datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_raw/Dataset001_ICHBinary
+  splits: /home/stu03/workspace/datasets/hemorrhage/v1/model_ready/nnunet/nnUNet_preprocessed/Dataset001_ICHBinary/splits_final.json
+  datalist: /home/stu03/workspace/model/runs/H-FM10/data/datalist_fold0.json
+training:
+  patch_size: [128, 128, 96]
+  spacing_mm: [1.5, 1.5, 1.5]
+  epochs: 150
+  learning_rate: 0.0001
+  amp: true
+  cache_rate: 0.0
+  num_workers: 2
+  early_stopping: false
+outputs:
+  run_dir: /home/stu03/workspace/model/runs/H-FM10
+  bundle_workdir: /home/stu03/workspace/model/external/NV-Segment-CTMR/NV-Segment-CT
+  results_dir: /home/stu03/workspace/model/runs/H-FM10/bundle

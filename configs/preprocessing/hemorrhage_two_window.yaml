@@ -1,0 +1,29 @@
+schema_version: 1
+release_id: hemorrhage_two_window_v1
+mode: two_window
+
+source_dataset:
+  dataset_id: 1
+  dataset_name: ICHBinary
+
+target_dataset:
+  dataset_id: 3
+  dataset_name: ICHBinary2Window
+
+windows:
+  - channel: 0
+    name: brain
+    center: 40
+    width: 80
+
+  - channel: 1
+    name: subdural
+    center: 75
+    width: 215
+
+output:
+  dtype: float32
+  range: [0.0, 1.0]
+
+split:
+  preserve_existing_split: true

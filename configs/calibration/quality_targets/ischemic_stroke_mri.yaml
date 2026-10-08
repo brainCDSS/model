@@ -1,0 +1,9 @@
+version: "1.0.0"
+task: ischemia
+status: provisional_requires_clinical_approval
+rationale: "Engineering candidate only; emphasizes multifocal lesion detection and requires clinical approval."
+positive_case_rules:
+  dice_min: 0.50
+  lesion_recall_min: 0.60
+negative_case_rules:
+  fp_components_max: 0
