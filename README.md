@@ -14,9 +14,9 @@ BrainOn은 출혈성 병변(CT), 허혈성 병변(MRI DWI·ADC), 뇌동맥류(MR
 1. Key Results
 
 - Dice는 분할 영역의 겹침 정도를, Lesion Detection Rate는 개별 병변 탐지 비율을 나타냅니다.
-- FP/case는 평가 데이터 한 건당 오탐으로 분류된 예측 병변 수입니다. CT 노트북은 mean_fp_components_per_case, MRI 노트북은 fp_per_scan으로 기록합니다.
+- FP/case는 평가 데이터 한 건당 오탐으로 분류된 예측 병변 수입니다. 
 - 병변 매칭·평균 방식은 실험별로 다를 수 있습니다. 특히 CT의 표기 탐지율은 정답 병변과 예측 영역이 1 voxel 이상 겹치는 경우를 기준으로 합니다. 모든 수치는 각 실험의 원본 기록에서 확인해야 합니다.
-- 이 표는 Test 성능표가 아닙니다. 독립된 Test 결과와 비교하려면 동일한 평가 프로토콜 및 데이터 분할을 확인해야 합니다.
+
 2. Model Development & Selection
 2.1 CT — Intracranial Hemorrhage Segmentation
 최종 선정 모델: H-T01-E300
