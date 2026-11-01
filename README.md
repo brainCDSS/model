@@ -12,12 +12,6 @@ BrainOn은 출혈성 병변(CT), 허혈성 병변(MRI DWI·ADC), 뇌동맥류(MR
 연구·교육용 프로젝트: 본 시스템은 의료인의 판단을 보조하기 위한 연구 결과이며, 독립적인 임상 진단 또는 치료 결정에 사용하도록 검증된 의료기기가 아닙니다.
 
 1. Key Results
-아래는 각 영상 유형에서 대표적으로 선정·분석한 모델의 Validation 결과입니다. 서로 다른 영상 유형, 데이터셋, 평가 구현의 수치를 서로 직접 비교해 모델의 우열을 판단하지 않습니다.
-Modality	Selected Experiment	Val Dice ↑	Lesion Detection Rate ↑	FP/case ↓
-CT	H-T01-E300	0.6264	63.18%	5.74
-MRI	I-E01 (Soft Voting)	0.8095	69.32%	1.11
-MRA	A-B04	0.5737	82.50%	—
-
 
 - Dice는 분할 영역의 겹침 정도를, Lesion Detection Rate는 개별 병변 탐지 비율을 나타냅니다.
 - FP/case는 평가 데이터 한 건당 오탐으로 분류된 예측 병변 수입니다. CT 노트북은 mean_fp_components_per_case, MRI 노트북은 fp_per_scan으로 기록합니다.
